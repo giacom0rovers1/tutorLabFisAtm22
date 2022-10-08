@@ -42,3 +42,7 @@ vignettes/*.pdf
 # Power Point presentations and PDF documents
 *.pptx
 *.pdf
+
+# Pictures
+*.png
+
