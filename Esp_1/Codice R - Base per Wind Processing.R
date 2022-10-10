@@ -1,6 +1,6 @@
 # ===========================================================
 # = LABORATORY OF DATA PROCESSING AND EVALUATION            =
-# = Measured Wind Speed and Wind Direction      v2020.10.05 =
+# = Measured Wind Speed and Wind Direction      v2022.10.10 =
 # ===========================================================
 
 # Clean variables previously defined
@@ -14,15 +14,27 @@ require(lubridate)
 # READING DATA ==============================================
 # Define the working directory
 # setwd("C:/Users/qucci/Desktop/RTD_2017/Corso Lab/Corso 2021_22")
+setwd("C:/projects/tutorLabFisAtm22/Esp_1")
 
-# Define the data directory
+# Define the project directories
 datafolder <- "dati/"
+figfolder  <- "figure/"
+resfolder  <- "risultati/"
+# ci vorrebbe un if() per crearle se non esistono...
+
+
 
 # Define the input filenames and assign them to a variable
-StationDataFile <- paste0(datafolder, "Dati Meteo - Stazione A.txt")
+# StationDataFile <- "Dati Meteo - Stazione A.txt"
+StationDataFileName <- "Dati Meteo - Stazione A"
+
+
+
+
+
 
 # Read data as a table and assigning to the variable called 'StationData'
-StationData  <- read.table(file(StationDataFile),
+StationData  <- read.table(file(paste0(datafolder, StationDataFileName, ".txt")),
                            sep       = "",              # separate columns by space
                            na.string = NA,              # tag empty values as "NA"
                            as.is     = TRUE,            # convert character variables to factors
@@ -45,15 +57,6 @@ dim(StationData)
 # Print only the first 6 rows and 10 columns of a matrix
 StationData[1:6,1:10]
 
-
-# Alternative method with readr package
-StationDataFile_G <- paste0(datafolder, "DatiMeteo_StazA.txt")       # File di dati con la prima riga formattata coerentemente col resto (creare script automatico)
-StationData_G <- read_table(StationDataFile_G,
-                            col_types = list(                        # Date e Time vengono già lette come data e orario rispettivamente
-                              Date = col_date(format = "%Y%m%d"),  
-                              Time = col_time(format = "%H.%M")
-                            ))
-StationData_G %>% head()
 
 
 # DATE FORMAT ===============================================
@@ -164,12 +167,15 @@ LenSD
 
 # EXPORT PROCESSED DATA =====================================
 # Set the output filenames based on the input filename
-StationDataFile <- strsplit(StationDataFile,".txt")
+# StationDataFile <- strsplit(StationDataFile,".txt") 
 
-write.table(StationData, paste0(StationDataFile,"_proc.txt")    , sep = "\t", row.names=FALSE, col.names=FALSE)
-write.table(ExcTIME    , paste0(StationDataFile,"_ExcTIME.txt") , sep = "\t", row.names=FALSE, col.names=FALSE)
-write.table(ExcWSneg   , paste0(StationDataFile,"_ExcWSneg.txt"), sep = "\t", row.names=FALSE, col.names=FALSE)
-write.table(ExcWS3h    , paste0(StationDataFile,"_ExcWS3h.txt") , sep = "\t", row.names=FALSE, col.names=FALSE)
+# not nice to change the content of a variable along the script
+# maybe better to store the data in a RData file..
+
+write.table(StationData, paste0(resfolder, StationDataFileName,"_proc.txt")    , sep = "\t", row.names=FALSE, col.names=FALSE)
+write.table(ExcTIME    , paste0(resfolder, StationDataFileName,"_ExcTIME.txt") , sep = "\t", row.names=FALSE, col.names=FALSE)
+write.table(ExcWSneg   , paste0(resfolder, StationDataFileName,"_ExcWSneg.txt"), sep = "\t", row.names=FALSE, col.names=FALSE)
+write.table(ExcWS3h    , paste0(resfolder, StationDataFileName,"_ExcWS3h.txt") , sep = "\t", row.names=FALSE, col.names=FALSE)
 
 
 # DATA CONSISTENCY ===========================================
@@ -212,8 +218,11 @@ PLOT <- function(data) barplot(data,
                        names.arg = c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")   )
 PLOT(iPLOT)
 
+
+
 # Save plot as PNG (also accepts PDF, JPG, etc...)
-png(file=paste0(StationDataFile,"_DataConsistency.png"))
+# png(file=paste0(StationDataFile,"_DataConsistency.png"))
+png(file=paste0(figfolder, StationDataFileName, "_DataConsistency.png"))
 PLOT(iPLOT)
 dev.off()
 
@@ -226,7 +235,8 @@ HistWS <- function(data) hist(data, main = "Histogram of Wind Speed (Station A)"
 HistWS(StationData$"wndSpeed")
 
 # Save plot as PNG (also accepts PDF, JPG, etc...)
-png(file=paste0(StationDataFile,"_HistWS.png"))
+# png(file=paste0(StationDataFile,"_HistWS.png"))
+png(file=paste0(figfolder, StationDataFileName, "_HistWS.png"))
 HistWS(StationData$"wndSpeed")
 dev.off()
 
@@ -279,7 +289,9 @@ WindRosePLOT <- function(data) {barplot(data,
 WindRosePLOT(WindROSE)
 
 # Save plot as PNG (also accepts PDF, JPG, etc...)
-png(file=paste0(StationDataFile,"_WindRose.png"))
+# png(file=paste0(StationDataFile,"_WindRose.png"))
+png(file=paste0(figfolder, StationDataFileName, "_WindRose.png"))
+
 WindRosePLOT(WindROSE)
 dev.off()
 
@@ -300,11 +312,11 @@ toLAKES[1:6,]
 
 
 #this section added to append the "LAKES FORMAT" string at the beginning of the file
-fileConn<-file(paste0(StationDataFile,"_LAKES.txt"))
+fileConn <- file(paste0(resfolder, StationDataFileName,"_LAKES.txt"))
 writeLines(c("LAKES FORMAT"), fileConn)
 close(fileConn)
 
-write.table(toLAKES, paste0(StationDataFile,"_LAKES.txt"),
+write.table(toLAKES, paste0(resfolder, StationDataFileName,"_LAKES.txt"),
             sep = " ", row.names=FALSE, col.names=FALSE, append =TRUE)
 
 # STATISTICAL INDEXES ========================================
@@ -331,7 +343,9 @@ TextLM <- paste0("y = ",round(as.numeric(gsub(",","",TextLM[[1]][3])),digits=2),
                  " + ",round(as.numeric(gsub(")","",TextLM[[1]][6])),digits=2),"x")
 
 # Save plot as PNG (also accepts PDF, JPG, etc...)
-png(file=paste0(StationDataFile,"_ScatterPlot.png"))
+# png(file=paste0(StationDataFile,"_ScatterPlot.png"))
+png(file=paste0(figfolder, StationDataFileName, "_ScatterPlot.png"))
+
 plot(StationData$"wndSpeed"~StationData$"Hour", main = "Scatter Plot (Station A)",
      xlab = "Hour", ylab = "Wind Speed (m/s)", pch = 20, col = "gray")
 abline(lm(StationData$"wndSpeed"~StationData$"Hour"), col = "red")
@@ -393,7 +407,10 @@ legend(.75, 2.2 , c("N","NE","E","SE","S","SW","W","NW","Calm"), pch = 15, borde
 }
 
 # Save plot as PNG (also accepts PDF, JPG, etc...)
-png(file=paste0(StationDataFile,"_DailyWind.png"))
+# png(file=paste0(StationDataFile,"_DailyWind.png"))
+png(file=paste0(figfolder, StationDataFileName, "_DailyWind.png"))
 WindHMPLOT(iWindHM)
 dev.off()
+
 dev.off()
+
