@@ -24,7 +24,9 @@ resfolder  <- "risultati/"
 
 
 # Define the input filenames and assign them to a variable
-StationDataRootName <- "Dati Meteo - Stazione A"
+StationDataRootName <- "Dati Meteo - Stazione A" 
+# sarebbero meglio nomi senza spazi, come "DatiMeteo_StazA.txt"
+
 
 filenames <- list(
   
@@ -124,6 +126,9 @@ dim(StationData)
 #install.packages("dplyr")
 library(dplyr)
 # KEEP ONLY HOURLY RECORDS ----------------------------------
+
+# TODO non eliminare i dati ma aggregarli! Medie orarie...
+
 # Create a variable to storage the excluded values
 ExcTIME <- dplyr::filter(StationData,(StationData$"Minutes" > 0))
 

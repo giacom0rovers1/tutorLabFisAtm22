@@ -3,7 +3,7 @@ title: "Wind processing with tidyverse - R Notebook"
 output: html_notebook
 ---
 
-## Esperienza 1 - Laboratorio di Fisica dell'Atmosfera A.A. 2022/23 
+## Esperienza 1 - Laboratorio di Fisica dell'Atmosfera A.A. 2022/23
 
 **Autore**: Giacomo Roversi
 
