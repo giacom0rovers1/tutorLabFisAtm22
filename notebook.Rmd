@@ -44,6 +44,27 @@ setwd("C:/projects/tutorLabFisAtm22/Esp_1")
 datafolder <- "dati/"
 figfolder  <- "figure/"
 resfolder  <- "risultati/"
+
+# Define the input filenames and assign them to a variable
+StationDataRootName <- "DatiMeteo_StazA"
+
+filenames <- list(
+  
+  input           = paste0(datafolder, StationDataRootName, ".txt"),
+  
+  output.proc     = paste0(resfolder , StationDataRootName, "_proc.txt"),
+  output.ExcTIME  = paste0(resfolder , StationDataRootName, "_ExcTIME.txt"),
+  output.ExcWSneg = paste0(resfolder , StationDataRootName, "_ExcWSneg.txt"),
+  ouput.ExcWS3h   = paste0(resfolder , StationDataRootName, "_ExcWS3h.txt"),
+  output.LAKES    = paste0(resfolder , StationDataRootName, "_LAKES.txt"),
+  
+  figure.DataConsistency = paste0(figfolder, StationDataRootName, "_DataConsistency.png"),
+  figure.HistWS          = paste0(figfolder, StationDataRootName, "_HistWS.png"),
+  figure.WindRose        = paste0(figfolder, StationDataRootName, "_WindRose.png"),
+  figure.ScatterPlot     = paste0(figfolder, StationDataRootName, "_ScatterPlot.png"),
+  figure.DailyWind       = paste0(figfolder, StationDataRootName, "_DailyWind.png")
+  
+)
 ```
 
 ```{r}
@@ -51,10 +72,26 @@ resfolder  <- "risultati/"
 StationDataFileName <- "DatiMeteo_StazA"                           # File di dati con la prima riga formattata coerentemente col resto (creare script automatico)
 
 # Alternative method with readr package
-StationData <- read_table(paste0(datafolder, StationDataFileName, ".txt"),
+StationData <- read_table(paste0("Esp_1/", filenames$input),
                             col_types = list(                        # Date e Time vengono già lette come data e orario rispettivamente
                               Date = col_date(format = "%Y%m%d"),  
                               Time = col_time(format = "%H.%M")
                             ))
-StationData_G %>% head()
+StationData %>% head()
+```
+
+```{r}
+
+# !! non suggerire le analisi avanzate
+
+StationData %>%
+  filter(
+    Press > 800,
+    outTemp > -30,
+    outHum > 0,
+    totRad > 0
+  ) %>%
+ggplot(aes(hour(Time), wndSpeed, color = windGust)) + 
+  geom_count() + 
+  theme_bw()
 ```
