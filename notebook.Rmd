@@ -123,7 +123,7 @@ Season[which(month(StationData$DateTime) %in% 3:5)]        <- "MAM"
 Season[which(month(StationData$DateTime) %in% 6:8)]        <- "JJA"
 Season[which(month(StationData$DateTime) %in% 9:11)]       <- "SON"
 
-StationData$Season <- factor(Season)
+StationData$Season <- factor(Season, levels = c("DJF", "MAM", "JJA", "SON"))
 ```
 
 Posso ripetere lo stesso procedimento per dividere ad esempio in momenti della giornata.
@@ -138,6 +138,7 @@ La funzione `geom_histogram()` crea un istogramma della variabile specificata in
 StationData %>%
   ggplot(aes(year(DateTime), fill = Season)) + 
   geom_histogram(binwidth = 1) + 
+  scale_fill_brewer() +
   theme_bw()
 ```
 
@@ -183,20 +184,27 @@ ggplot(aes(hour(Time), wndSpeed, color = Season)) +
 ```
 
 Scatterplot che mette tre variabili a confronto...
+
 ```{r}
 StationData %>% 
   filter(
     wndSpeed >= 0, 
-    outHum >=0
+    outHum >=0, 
+    outTemp > -50,
+    inTemp > 0,
+    totRad >=0
     ) %>% 
-  ggplot(aes(windGust, wndSpeed, color = totRad)) +
+  ggplot(aes(totRad, outHum-inHum, color = outTemp-inTemp)) +
   geom_count() +
-  coord_fixed(
-    xlim=c(0,20), 
-    ylim=c(0,20)) + 
+  facet_wrap(~Season) +
+  scale_color_gradient2() + 
+  # coord_cartesian(xlim = c(0,100)) + 
+  # coord_fixed(
+  #   xlim=c(0,20),
+  #   ylim=c(0,20)
+  #   ) +
   theme_bw()
 
 ```
-
 
 Continua...
