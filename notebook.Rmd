@@ -182,4 +182,21 @@ ggplot(aes(hour(Time), wndSpeed, color = Season)) +
 
 ```
 
+Scatterplot che mette tre variabili a confronto...
+```{r}
+StationData %>% 
+  filter(
+    wndSpeed >= 0, 
+    outHum >=0
+    ) %>% 
+  ggplot(aes(windGust, wndSpeed, color = totRad)) +
+  geom_count() +
+  coord_fixed(
+    xlim=c(0,20), 
+    ylim=c(0,20)) + 
+  theme_bw()
+
+```
+
+
 Continua...
