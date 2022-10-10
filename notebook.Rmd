@@ -1,31 +1,18 @@
 ---
-title: "R Notebook"
+title: "Wind processing with tidyverse - R Notebook"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code.
+## Esperienza 1 - Laboratorio di Fisica dell'Atmosfera A.A. 2022/23 
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*.
-
-```{r}
-plot(cars)
-```
-
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+**Autore**: Giacomo Roversi
 
 ------------------------------------------------------------------------
 
-# Wind processing
-
-Esperienza 1 - Laboratorio di Fisica dell'Atmosfera 2022/23 - tutor: Giacomo Roversi
-
-------------------------------------------------------------------------
+Per cominciare inizializziamo l'ambiente di calcolo: cancello eventuali variabili e carico i pacchetti necessari.
 
 ```{r}
+# clear the workspace
 rm(list=ls())
 ```
 
@@ -35,18 +22,20 @@ require(tidyverse)
 require(lubridate)
 ```
 
-```{r}
-# READING DATA ==============================================
-# Define the working directory
-setwd("C:/projects/tutorLabFisAtm22/Esp_1")
+------------------------------------------------------------------------
 
+### Definizione dei nomi dei files e delle cartelle
+
+Genero tutti i nomi dei vari output del progetto partendo dalla variabile "radice" che imposto qui. L'ho chiamata `StationDataRootName`. Dichiaro tutto all'inizio del codice per non dover andare poi in cerca dei nomi se volessi fare delle modifiche. Distribuisco i files in tre cartelle: `datafolder` conterrà solo i dati grezzi in input, da non modificare, `resfolder` conterrà tutti i dati processati e i risultati, `figfolder` le figure.
+
+```{r}
 # Define the project directories (relative path)
-datafolder <- "dati/"
-figfolder  <- "figure/"
-resfolder  <- "risultati/"
+datafolder <- "Esp_1/dati/"
+figfolder  <- "Esp_1/figure/"
+resfolder  <- "Esp_1/risultati/"
 
 # Define the input filenames and assign them to a variable
-StationDataRootName <- "DatiMeteo_StazA"
+StationDataRootName <- "Dati Meteo - Stazione A"
 
 filenames <- list(
   
@@ -67,18 +56,55 @@ filenames <- list(
 )
 ```
 
-```{r}
-# Define the input filenames and assign them to a variable
-StationDataFileName <- "DatiMeteo_StazA"                           # File di dati con la prima riga formattata coerentemente col resto (creare script automatico)
+------------------------------------------------------------------------
 
-# Alternative method with readr package
-StationData <- read_table(paste0("Esp_1/", filenames$input),
-                            col_types = list(                        # Date e Time vengono già lette come data e orario rispettivamente
+### Correzione dell'intestazione dei files di dati delle stazioni Davis
+
+Leggo la prima riga e la spezzo dove ci sono le virgole, poi processo il risultato attraverso vari passaggi di sostituzione caratteri in modo da eliminare il cancelletto a inizio riga e i vari spazi vuoti rimasti. Salvo il tutto nella variabile "header", che mi servirà tra poco.
+
+```{r}
+connection <- file(filenames$input)
+open(connection)
+
+header <- strsplit(readLines(connection, 1), ",")[[1]] %>% 
+  str_replace("#", "")     %>%   
+  str_replace("     ", "") %>%
+  str_replace("    ", "")  %>%
+  str_replace("   ", "")   %>%
+  str_replace(" ", "")     %>%
+  str_replace(" ", "")
+
+close(connection)
+
+```
+
+**Nota 1.** L'operatore `%>%` concatena l'output di una funzione come input della successiva (come l'operatore "pipe" `|` in bash ad esempio) . Solo le funzioni del pacchetto `tidyverse` sono predisposte per accettare questa concatenazione in input. Le funzioni base di R invece sono utilizzate nella prima riga nella classica forma innestata ("nested"), ovvero una dentro l'altra.
+
+**Nota 2.** La funzione `strsplit()` restituisce come output una **lista** (vedi `?list`). La lista ha un solo elemento, costituito da un vettore di stringhe di caratteri, che sarebbero i vari pezzi in cui è stata suddivisa la prima riga del nostro file di input. Il suffisso `[[1]]` che compare dopo `strsplit()` serve a selezionare direttamente il vettore caratteri contenuto nella prima posizione della lista, invece che tutta la lista, che non sarebbe un input corretto per `str_replace()`.
+
+------------------------------------------------------------------------
+
+### Lettura intelligente del file dei dati
+
+Tramite il pacchetto `readr` (incluso in `tidyerse`), le colonne "Date" e "Time" possono essere già importate rispettivamente come date e orari (formati specifici). In questo modo facilitiamo le operazioni sugli intervalli temporali (i giorni del calendario e le ore del giorno vengono gestite in automatico). Il metodo è robusto perché ho preso i nomi delle colonne direttamente dal file, quindi non rischio di sbagliare l'ordine.
+
+```{r}
+# READING DATA
+StationData <- read_table(filenames$input,
+                            col_types = list(                        
                               Date = col_date(format = "%Y%m%d"),  
                               Time = col_time(format = "%H.%M")
-                            ))
+                            ),
+                          comment = "#",
+                          col_names = header)
 StationData %>% head()
 ```
+
+I dati vengono salvati direttamente in una "*tibble*", che è un "*data.frame*" - ma potenziato - che costituisce la struttura dati di base del pacchetto `tidyr` di `tidyverse`. L'output nel terminale è già tagliato in modo da non occupare troppe righe e sono incluse informazioni sui formati delle varie colonne. La visualizzazione è interattiva e permettere di scorrere verso destra per vedere le colonne oltre la decima.
+
+------------------------------------------------------------------------
+
+TODO Inserire exploratory graphs (istogrammi, ecc...) ma solo come esempi da personalizzare
 
 ```{r}
 
