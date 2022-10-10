@@ -13,35 +13,49 @@ require(lubridate)
 
 # READING DATA ==============================================
 # Define the working directory
-# setwd("C:/Users/qucci/Desktop/RTD_2017/Corso Lab/Corso 2021_22")
 setwd("C:/projects/tutorLabFisAtm22/Esp_1")
 
 # Define the project directories
 datafolder <- "dati/"
 figfolder  <- "figure/"
 resfolder  <- "risultati/"
-# ci vorrebbe un if() per crearle se non esistono...
+# TODO ci vorrebbe un if() per crearle se non esistono...
 
 
 
 # Define the input filenames and assign them to a variable
-# StationDataFile <- "Dati Meteo - Stazione A.txt"
-StationDataFileName <- "Dati Meteo - Stazione A"
+StationDataRootName <- "Dati Meteo - Stazione A"
 
-
+filenames <- list(
+  
+  input           = paste0(datafolder, StationDataRootName, ".txt"),
+  
+  output.proc     = paste0(resfolder , StationDataRootName, "_proc.txt"),
+  output.ExcTIME  = paste0(resfolder , StationDataRootName, "_ExcTIME.txt"),
+  output.ExcWSneg = paste0(resfolder , StationDataRootName, "_ExcWSneg.txt"),
+  ouput.ExcWS3h   = paste0(resfolder , StationDataRootName, "_ExcWS3h.txt"),
+  output.LAKES    = paste0(resfolder , StationDataRootName, "_LAKES.txt"),
+  
+  figure.DataConsistency = paste0(figfolder, StationDataRootName, "_DataConsistency.png"),
+  figure.HistWS          = paste0(figfolder, StationDataRootName, "_HistWS.png"),
+  figure.WindRose        = paste0(figfolder, StationDataRootName, "_WindRose.png"),
+  figure.ScatterPlot     = paste0(figfolder, StationDataRootName, "_ScatterPlot.png"),
+  figure.DailyWind       = paste0(figfolder, StationDataRootName, "_DailyWind.png")
+  
+)
 
 
 
 
 # Read data as a table and assigning to the variable called 'StationData'
-StationData  <- read.table(file(paste0(datafolder, StationDataFileName, ".txt")),
+StationData  <- read.table(filenames$input,
                            sep       = "",              # separate columns by space
                            na.string = NA,              # tag empty values as "NA"
                            as.is     = TRUE,            # convert character variables to factors
                            header    = FALSE,           # ignore the header
                            skip      = 1,               # skip the first row
                            col.names = c("Date","Time","Interval","Press","inTemp","outTemp","inHum","outHum","wndSpeed","wndDir","windGust","wGstDir","rainRate","rain","dewpoint","wdChill","heatIndx","ET","totRad","UV")
-                           )
+)
 
 #help(command)                     # Help about "command"
 #ls()                              # Print the current active variables
@@ -66,7 +80,7 @@ Temp <- (t(rbind(as.numeric(substr(StationData[,1],1,4)),  # year
                  as.numeric(substr(StationData[,1],7,8)),  # day
                  floor(StationData[,2]),                   # hour
                  round(100*(StationData[,2] %%1))          # minutes
-                 )))
+)))
 
 # Define names to rows and columns
 colnames(Temp) <- c("Year","Month","Day","Hour","Minutes")
@@ -84,9 +98,9 @@ LenSD
 # DATA SORTING ==============================================
 # Function to convert time to absolute time (days after 01/01/1970, R standard)
 AbsTIME <- function(i) round(as.numeric(as.Date(paste0(StationData[i,1],
-                       ifelse(StationData[i,2]<10,"0",""),StationData[i,2],
-                       ifelse(StationData[i,3]<10,"0",""),StationData[i,3]),
-                       "%Y%m%d"))+(StationData[i,4]/24)+((StationData[i,5]/60)*(1/24)),digits=2)
+                                                       ifelse(StationData[i,2]<10,"0",""),StationData[i,2],
+                                                       ifelse(StationData[i,3]<10,"0",""),StationData[i,3]),
+                                                "%Y%m%d"))+(StationData[i,4]/24)+((StationData[i,5]/60)*(1/24)),digits=2)
 # Total data period in days
 AbsTIME(dim(StationData)[1])-AbsTIME(1)
 
@@ -140,14 +154,14 @@ ExcWS3h <- 0     # Create a variable to storage the excluded values
 
 # Find records under the condition
 for (i in 3:dim(StationData)[1])
-   if (((StationData[i,1]-StationData[i-2,1])<0.1)&    # 1h ~ 0.04 AbsTime
-       (abs(StationData[i,7]-StationData[i-2,7])<0.1)&
-       (abs(StationData[i,7]-StationData[i-1,7])<0.1)&
-       (StationData[i,7]>0)  # keep calm winds
-       )
-      ifelse(length(ExcWS3h)==1,
-         ExcWS3h <- c(i-2,i-1,i),
-            ExcWS3h <- c(ExcWS3h,i-2,i-1,i))
+  if (((StationData[i,1]-StationData[i-2,1])<0.1)&    # 1h ~ 0.04 AbsTime
+      (abs(StationData[i,7]-StationData[i-2,7])<0.1)&
+      (abs(StationData[i,7]-StationData[i-1,7])<0.1)&
+      (StationData[i,7]>0)  # keep calm winds
+  )
+    ifelse(length(ExcWS3h)==1,
+           ExcWS3h <- c(i-2,i-1,i),
+           ExcWS3h <- c(ExcWS3h,i-2,i-1,i))
 
 # Exclude Duplicates (i)
 ExcWS3h <- unique(ExcWS3h)
@@ -167,15 +181,14 @@ LenSD
 
 # EXPORT PROCESSED DATA =====================================
 # Set the output filenames based on the input filename
-# StationDataFile <- strsplit(StationDataFile,".txt") 
 
-# not nice to change the content of a variable along the script
+# TODO not nice to change the content of a variable along the script
 # maybe better to store the data in a RData file..
 
-write.table(StationData, paste0(resfolder, StationDataFileName,"_proc.txt")    , sep = "\t", row.names=FALSE, col.names=FALSE)
-write.table(ExcTIME    , paste0(resfolder, StationDataFileName,"_ExcTIME.txt") , sep = "\t", row.names=FALSE, col.names=FALSE)
-write.table(ExcWSneg   , paste0(resfolder, StationDataFileName,"_ExcWSneg.txt"), sep = "\t", row.names=FALSE, col.names=FALSE)
-write.table(ExcWS3h    , paste0(resfolder, StationDataFileName,"_ExcWS3h.txt") , sep = "\t", row.names=FALSE, col.names=FALSE)
+write.table(StationData, filenames$output.proc    , sep = "\t", row.names=FALSE, col.names=FALSE)
+write.table(ExcTIME    , filenames$output.ExcTIME , sep = "\t", row.names=FALSE, col.names=FALSE)
+write.table(ExcWSneg   , filenames$output.ExcWSneg, sep = "\t", row.names=FALSE, col.names=FALSE)
+write.table(ExcWS3h    , filenames$ouput.ExcWS3h  , sep = "\t", row.names=FALSE, col.names=FALSE)
 
 
 # DATA CONSISTENCY ===========================================
@@ -183,8 +196,8 @@ write.table(ExcWS3h    , paste0(resfolder, StationDataFileName,"_ExcWS3h.txt") ,
 yexp.data <- function(year) 24*(365 + ifelse(((year %% 400)/4) == floor((year %% 400)/4),1,0))
 # Total of Hourly Data Expected by Month (Function)
 mexp.data <- function(month) 24*(ifelse(month==4|month==6|month==9|month==11,30,
-                                 ifelse(month==1|month==3|month==5|month==7|month==8|month==10|month==12,31,
-                                 28 )))
+                                        ifelse(month==1|month==3|month==5|month==7|month==8|month==10|month==12,31,
+                                               28 )))
 
 # Print the summary of StationData
 summary(StationData)
@@ -194,7 +207,7 @@ Temp     <- c(sum(yexp.data(unique(StationData$"Year"))),
               LenSD[1], min(LenSD), max(LenSD)-min(LenSD),
               LenSD[1]-LenSD[2], LenSD[2]-LenSD[3], LenSD[3]-LenSD[4])
 DataCONS <- matrix(as.numeric(c(Temp,round(Temp*100/sum(yexp.data(unique(StationData$"Year"))),digits=2)
-                   )),7,2)
+)),7,2)
 colnames(DataCONS) <- c("Station A","(%)")
 rownames(DataCONS) <- c("Expected","Available","Valid","Filtered"," > by Time","  > by WSneg","   > by WS3h")
 DataCONS
@@ -202,41 +215,41 @@ DataCONS
 # DISPLAY THE DATA CONSISTENCY BY MONTH AS A BARPLOT ---------
 # Compute the percentiles of valid data for each month
 monPERC <- function(month) 100*dim(dplyr::filter(StationData,(StationData$"Month" == month)))[1]/
-                                  (mexp.data(month)*length(unique(StationData$"Year"))+
-                                   sum(ifelse(month == 2 & ((unique(StationData$"Year") %% 400)/4) ==
-                                   floor((unique(StationData$"Year") %% 400)/4),1,0))   )
+  (mexp.data(month)*length(unique(StationData$"Year"))+
+     sum(ifelse(month == 2 & ((unique(StationData$"Year") %% 400)/4) ==
+                  floor((unique(StationData$"Year") %% 400)/4),1,0))   )
 
 for (i in 1:12) ifelse(i==1,iPLOT<-monPERC(i),iPLOT[i]<-monPERC(i))
 
 # Create a function for graphics as barplot
 PLOT <- function(data) barplot(data, 
-                       xlab = "Months", ylab = "Valid Data (%)", ylim = c(0,100), col = "darkblue",
-                       main = paste0("Station A (",
-                       ifelse(length(unique(StationData$"Year")) == 1, unique(StationData$"Year"),
-                       paste0(min(unique(StationData$"Year")),"-",max(unique(StationData$"Year"))) ),
-                       ")"),
-                       names.arg = c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")   )
+                               xlab = "Months", ylab = "Valid Data (%)", ylim = c(0,100), col = "darkblue",
+                               main = paste0("Station A (",
+                                             ifelse(length(unique(StationData$"Year")) == 1, unique(StationData$"Year"),
+                                                    paste0(min(unique(StationData$"Year")),"-",max(unique(StationData$"Year"))) ),
+                                             ")"),
+                               names.arg = c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")   )
 PLOT(iPLOT)
 
 
 
 # Save plot as PNG (also accepts PDF, JPG, etc...)
 # png(file=paste0(StationDataFile,"_DataConsistency.png"))
-png(file=paste0(figfolder, StationDataFileName, "_DataConsistency.png"))
+png(file=filenames$figure.DataConsistency)
 PLOT(iPLOT)
 dev.off()
 
 
 # HISTOGRAM OF WIND SPEED =====================================
 HistWS <- function(data) hist(data, main = "Histogram of Wind Speed (Station A)",
-                         xlab = "Wind Speed (m/s)", ylab = "Frequency",
-                         density = 10, angle = 45, col = "#0066CC", labels = TRUE)
+                              xlab = "Wind Speed (m/s)", ylab = "Frequency",
+                              density = 10, angle = 45, col = "#0066CC", labels = TRUE)
 
 HistWS(StationData$"wndSpeed")
 
 # Save plot as PNG (also accepts PDF, JPG, etc...)
 # png(file=paste0(StationDataFile,"_HistWS.png"))
-png(file=paste0(figfolder, StationDataFileName, "_HistWS.png"))
+png(file=filenames$figure.HistWS)
 HistWS(StationData$"wndSpeed")
 dev.off()
 
@@ -248,17 +261,17 @@ ii       <- 1           # WindROSE vector control
 
 # NORTH WINDS LOOPING ----------------------------------------
 for(ws in 2:6) {
-   WindROSE[ii] <- dim(dplyr::filter(StationData,(
-                      ((StationData$"wndDir" >= 360-22.5)|(StationData$"wndDir" < 0+22.5))&
-                      (StationData$"wndSpeed" >= wsCAT[ws-1])&(StationData$"wndSpeed" < wsCAT[ws]))))[1]
-   ii <- ii + 1 }
+  WindROSE[ii] <- dim(dplyr::filter(StationData,(
+    ((StationData$"wndDir" >= 360-22.5)|(StationData$"wndDir" < 0+22.5))&
+      (StationData$"wndSpeed" >= wsCAT[ws-1])&(StationData$"wndSpeed" < wsCAT[ws]))))[1]
+  ii <- ii + 1 }
 
 # OTHER DIRECTION WINDS LOOPING ------------------------------
 for(wd in seq(45,315,45)) { for(ws in 2:6) {
-   WindROSE[ii] <- dim(dplyr::filter(StationData,(
-                      ((StationData$"wndDir" >= wd-22.5)&(StationData$"wndDir" < wd+22.5))&
-                      (StationData$"wndSpeed" >= wsCAT[ws-1])&(StationData$"wndSpeed" < wsCAT[ws]))))[1]
-      ii <- ii + 1 }}
+  WindROSE[ii] <- dim(dplyr::filter(StationData,(
+    ((StationData$"wndDir" >= wd-22.5)&(StationData$"wndDir" < wd+22.5))&
+      (StationData$"wndSpeed" >= wsCAT[ws-1])&(StationData$"wndSpeed" < wsCAT[ws]))))[1]
+  ii <- ii + 1 }}
 
 # MATRIX BUILD -----------------------------------------------
 WindROSE           <- 100*matrix(WindROSE,5,8)/sum(yexp.data(unique(StationData$"Year")))#dim(StationData)[1]
@@ -268,30 +281,29 @@ WindROSE
 
 # Get the stacked barplot ------------------------------------
 WindRosePLOT <- function(data) {barplot(data, 
-                xlab = "Wind Directions", ylab = "Frequency (%)", ylim = c(0,12), 
-                border = "white", space = 0.05, font.axis = 2,
-                col = c("#99CCFF","#6699CC","#0066CC","#003366","#000033"),
-                main = paste0("Station A (",
-                ifelse(length(unique(StationData$"Year")) == 1, unique(StationData$"Year"),
-                paste0(min(unique(StationData$"Year")),"-",max(unique(StationData$"Year"))) ),")"),
-                sub = paste0("Calm ",round(100*dim(dplyr::filter(StationData,StationData$"wndSpeed" < 2/3.6))[1]/
-                                     sum(yexp.data(unique(StationData$"Year"))),digits=2),
-                             "%     Missing ",round(100*(1-dim(StationData)[1]/sum(yexp.data(unique(StationData$"Year")))),
-                digits=2),"%"))
-                legend("topright",c(paste0("0.56 - 1.67 (",round(sum(WindROSE[1,]),digits=2),"%)"),
-                            paste0("1.67 - 3.33 (",round(sum(WindROSE[2,]),digits=2),"%)"),
-                            paste0("3.33 - 5.28 (",round(sum(WindROSE[3,]),digits=2),"%)"),
-                            paste0("5.28 - 8.33 (",round(sum(WindROSE[4,]),digits=2),"%)"),
-                            paste0("> 8.33 ("     ,round(sum(WindROSE[5,]),digits=2),"%)")),
-                        pch   = 15, border = NA,
-                        col   = c("#99CCFF","#6699CC","#0066CC","#003366","#000033"),
-                        title = "Wind Speed (m/s)")}
+                                        xlab = "Wind Directions", ylab = "Frequency (%)", ylim = c(0,12), 
+                                        border = "white", space = 0.05, font.axis = 2,
+                                        col = c("#99CCFF","#6699CC","#0066CC","#003366","#000033"),
+                                        main = paste0("Station A (",
+                                                      ifelse(length(unique(StationData$"Year")) == 1, unique(StationData$"Year"),
+                                                             paste0(min(unique(StationData$"Year")),"-",max(unique(StationData$"Year"))) ),")"),
+                                        sub = paste0("Calm ",round(100*dim(dplyr::filter(StationData,StationData$"wndSpeed" < 2/3.6))[1]/
+                                                                     sum(yexp.data(unique(StationData$"Year"))),digits=2),
+                                                     "%     Missing ",round(100*(1-dim(StationData)[1]/sum(yexp.data(unique(StationData$"Year")))),
+                                                                            digits=2),"%"))
+  legend("topright",c(paste0("0.56 - 1.67 (",round(sum(WindROSE[1,]),digits=2),"%)"),
+                      paste0("1.67 - 3.33 (",round(sum(WindROSE[2,]),digits=2),"%)"),
+                      paste0("3.33 - 5.28 (",round(sum(WindROSE[3,]),digits=2),"%)"),
+                      paste0("5.28 - 8.33 (",round(sum(WindROSE[4,]),digits=2),"%)"),
+                      paste0("> 8.33 ("     ,round(sum(WindROSE[5,]),digits=2),"%)")),
+         pch   = 15, border = NA,
+         col   = c("#99CCFF","#6699CC","#0066CC","#003366","#000033"),
+         title = "Wind Speed (m/s)")}
 WindRosePLOT(WindROSE)
 
 # Save plot as PNG (also accepts PDF, JPG, etc...)
 # png(file=paste0(StationDataFile,"_WindRose.png"))
-png(file=paste0(figfolder, StationDataFileName, "_WindRose.png"))
-
+png(file=filenames$figure.WindRose)
 WindRosePLOT(WindROSE)
 dev.off()
 
@@ -302,7 +314,7 @@ toLAKES <- cbind(matrix(rep(99999,dim(StationData)[1]),dim(StationData)[1],1), #
                  StationData[,2:5],                                            # Date (year, month, day, hour)
                  round(StationData[,8],digits=0),                              # Rounded Wind Direction (?)
                  round(1.94384*StationData[,7],digits=0)                       # Rounded Wind Speed (knot = 1.94384 x m/s)
-                 )
+)
 colnames(toLAKES) <- c("StID","YYYY","MM","DD","HH","Dir","WS")
 rownames(toLAKES) <- c(1:dim(StationData)[1])
 
@@ -312,11 +324,11 @@ toLAKES[1:6,]
 
 
 #this section added to append the "LAKES FORMAT" string at the beginning of the file
-fileConn <- file(paste0(resfolder, StationDataFileName,"_LAKES.txt"))
+fileConn <- file(filenames$output.LAKES)
 writeLines(c("LAKES FORMAT"), fileConn)
 close(fileConn)
 
-write.table(toLAKES, paste0(resfolder, StationDataFileName,"_LAKES.txt"),
+write.table(toLAKES, filenames$output.LAKES,
             sep = " ", row.names=FALSE, col.names=FALSE, append =TRUE)
 
 # STATISTICAL INDEXES ========================================
@@ -332,7 +344,7 @@ sqrt(sum((StatIND[,1]-StatIND[,2])^2)/dim(StatIND)[1])
 # Pearson Correlation (R)
 cor(StatIND)[1,2]
 mean( (StatIND[,1]-mean(StatIND[,1]))*(StatIND[,2]-mean(StatIND[,2])) )/
-                     (sd(StatIND[,1])*sd(StatIND[,2]))
+  (sd(StatIND[,1])*sd(StatIND[,2]))
 
 
 
@@ -344,7 +356,7 @@ TextLM <- paste0("y = ",round(as.numeric(gsub(",","",TextLM[[1]][3])),digits=2),
 
 # Save plot as PNG (also accepts PDF, JPG, etc...)
 # png(file=paste0(StationDataFile,"_ScatterPlot.png"))
-png(file=paste0(figfolder, StationDataFileName, "_ScatterPlot.png"))
+png(file=filenames$figure.ScatterPlot)
 
 plot(StationData$"wndSpeed"~StationData$"Hour", main = "Scatter Plot (Station A)",
      xlab = "Hour", ylab = "Wind Speed (m/s)", pch = 20, col = "gray")
@@ -356,23 +368,23 @@ dev.off()
 # HOURLY MEAN WIND ============================================
 
 WindHM <- function(hh) c(
-dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 360-22.5)| (StationData$"wndDir" <   0+22.5))&
-                                (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
-dim(dplyr::filter(StationData,(((StationData$"wndDir"   >=  45-22.5)& (StationData$"wndDir" <  45+22.5))&
-                                (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
-dim(dplyr::filter(StationData,(((StationData$"wndDir"   >=  90-22.5)& (StationData$"wndDir" <  90+22.5))&
-                                (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
-dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 135-22.5)& (StationData$"wndDir" < 135+22.5))&
-                                (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
-dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 180-22.5)& (StationData$"wndDir" < 180+22.5))&
-                                (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
-dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 225-22.5)& (StationData$"wndDir" < 225+22.5))&
-                                (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
-dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 270-22.5)& (StationData$"wndDir" < 270+22.5))&
-                                (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
-dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 315-22.5)& (StationData$"wndDir" < 315+22.5))&
-                                (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
-dim(dplyr::filter(StationData,  (StationData$"wndSpeed" <     2/3.6)& (StationData$"Hour" == hh)))[1])
+  dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 360-22.5)| (StationData$"wndDir" <   0+22.5))&
+                                   (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
+  dim(dplyr::filter(StationData,(((StationData$"wndDir"   >=  45-22.5)& (StationData$"wndDir" <  45+22.5))&
+                                   (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
+  dim(dplyr::filter(StationData,(((StationData$"wndDir"   >=  90-22.5)& (StationData$"wndDir" <  90+22.5))&
+                                   (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
+  dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 135-22.5)& (StationData$"wndDir" < 135+22.5))&
+                                   (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
+  dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 180-22.5)& (StationData$"wndDir" < 180+22.5))&
+                                   (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
+  dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 225-22.5)& (StationData$"wndDir" < 225+22.5))&
+                                   (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
+  dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 270-22.5)& (StationData$"wndDir" < 270+22.5))&
+                                   (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
+  dim(dplyr::filter(StationData,(((StationData$"wndDir"   >= 315-22.5)& (StationData$"wndDir" < 315+22.5))&
+                                   (StationData$"wndSpeed" >=    2/3.6)& (StationData$"Hour" == hh))))[1],
+  dim(dplyr::filter(StationData,  (StationData$"wndSpeed" <     2/3.6)& (StationData$"Hour" == hh)))[1])
 
 iWindHM <- matrix(c(1:(9*24)),9,24)
 rownames(iWindHM) <- c("N","NE","E","SE","S","SW","W","NW","Calm")
@@ -393,22 +405,22 @@ Colors <- c(rgb(219/255,236/255,246/255),rgb(201/255,228/255,240/255),rgb(184/25
             rgb(221/255,238/255,233/255),rgb(232/255,244/255,241/255),rgb(250/255,250/255,250/255) )
 
 WindHMPLOT  <- function(iplot) {
-WindHMPLOTo <-  barplot(iplot, border = NA, space = 0, xlab = "Time (hours)",
-                        ylab = "Wind Speed (m/s) - Mean (solid) + StDev (dashed)",
-                        main = "Hourly Wind Speed and Wind Direction (Station A)",
-                        names=c("00","","","03","","","06","","","09","","",12,"","",15,"","",18,"","",21,"",""),
-                        col = Colors, ylim = c(0,2.2) )
-abline(v = seq(3,21,3), col = "gray")
-lines (x = WindHMPLOTo, y = iWindHM2)
-points(x = WindHMPLOTo, y = iWindHM2, pch = 19)
-lines (x = WindHMPLOTo, y = iWindHM3, lty = 2)
-legend(.75, 2.2 , c("N","NE","E","SE","S","SW","W","NW","Calm"), pch = 15, border = NA, horiz = TRUE,
-                title = "Frequency (%) by Wind Direction", col = Colors, bg = "white", cex = 0.8 ,pt.cex = 1.75)
+  WindHMPLOTo <-  barplot(iplot, border = NA, space = 0, xlab = "Time (hours)",
+                          ylab = "Wind Speed (m/s) - Mean (solid) + StDev (dashed)",
+                          main = "Hourly Wind Speed and Wind Direction (Station A)",
+                          names=c("00","","","03","","","06","","","09","","",12,"","",15,"","",18,"","",21,"",""),
+                          col = Colors, ylim = c(0,2.2) )
+  abline(v = seq(3,21,3), col = "gray")
+  lines (x = WindHMPLOTo, y = iWindHM2)
+  points(x = WindHMPLOTo, y = iWindHM2, pch = 19)
+  lines (x = WindHMPLOTo, y = iWindHM3, lty = 2)
+  legend(.75, 2.2 , c("N","NE","E","SE","S","SW","W","NW","Calm"), pch = 15, border = NA, horiz = TRUE,
+         title = "Frequency (%) by Wind Direction", col = Colors, bg = "white", cex = 0.8 ,pt.cex = 1.75)
 }
 
 # Save plot as PNG (also accepts PDF, JPG, etc...)
 # png(file=paste0(StationDataFile,"_DailyWind.png"))
-png(file=paste0(figfolder, StationDataFileName, "_DailyWind.png"))
+png(file=filenames$figure.DailyWind)
 WindHMPLOT(iWindHM)
 dev.off()
 
