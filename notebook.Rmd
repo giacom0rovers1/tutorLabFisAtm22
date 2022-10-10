@@ -17,7 +17,7 @@ rm(list=ls())
 ```
 
 ```{r}
-# load Tidyverse packages
+# load packages
 require(tidyverse)
 require(lubridate)
 ```
@@ -38,7 +38,6 @@ resfolder  <- "Esp_1/risultati/"
 StationDataRootName <- "Dati Meteo - Stazione A"
 
 filenames <- list(
-  
   input           = paste0(datafolder, StationDataRootName, ".txt"),
   
   output.proc     = paste0(resfolder , StationDataRootName, "_proc.txt"),
@@ -52,7 +51,6 @@ filenames <- list(
   figure.WindRose        = paste0(figfolder, StationDataRootName, "_WindRose.png"),
   figure.ScatterPlot     = paste0(figfolder, StationDataRootName, "_ScatterPlot.png"),
   figure.DailyWind       = paste0(figfolder, StationDataRootName, "_DailyWind.png")
-  
 )
 ```
 
@@ -86,13 +84,15 @@ close(connection)
 
 ### Lettura intelligente del file dei dati
 
-Tramite il pacchetto `readr` (incluso in `tidyerse`), le colonne "Date" e "Time" possono essere già importate rispettivamente come date e orari (formati specifici). In questo modo facilitiamo le operazioni sugli intervalli temporali (i giorni del calendario e le ore del giorno vengono gestite in automatico). Il metodo è robusto perché ho preso i nomi delle colonne direttamente dal file, quindi non rischio di sbagliare l'ordine.
+Tramite il pacchetto `readr` (incluso in `tidyerse`), le colonne "Date" e "Time" possono essere già importate rispettivamente come date e orari (formati specifici). In questo modo facilitiamo le operazioni sugli intervalli temporali (i giorni del calendario e le ore del giorno vengono gestite in automatico).
+
+Il metodo di definizione dei nomi delle variabili (colonne) è robusto perché ho preso i nomi direttamente dal file originale (variabile `header` assegnata a `col_names`), quindi non rischio di sbagliare l'ordine definendole manualmente. Se nel file di input cambiassero ad esempio l'ordine o il numero delle colonne, la nostra tabella si adeguerebbe in automatico (nel limite che il file non cambi così tanto da invalidare le convenzioni alla base della correzione al punto precedente).
 
 ```{r}
 # READING DATA
 StationData <- read_table(filenames$input,
                             col_types = list(                        
-                              Date = col_date(format = "%Y%m%d"),  
+                              Date = col_datetime(format = "%Y%m%d"),  
                               Time = col_time(format = "%H.%M")
                             ),
                           comment = "#",
@@ -104,12 +104,47 @@ I dati vengono salvati direttamente in una "*tibble*", che è un "*data.frame*" 
 
 ------------------------------------------------------------------------
 
-TODO Inserire exploratory graphs (istogrammi, ecc...) ma solo come esempi da personalizzare
+### Variabili aggiuntive di supporto
+
+Aggiungo colonne di supporto, non deve preoccuparmi la ridondanza, la memoria viene comunque gestita in modo efficiente a questo livello. Unisco data e ora nella colonna `DateTime`.
 
 ```{r}
+StationData$DateTime <- StationData$Date + StationData$Time
+```
 
-# !! non suggerire le analisi avanzate
+Poi creo una colonna di "factors" (vedi `?factor`) per la divisione in stagioni meteorologiche.
 
+```{r}
+# creo un vettore caratteri vuoto, della dimensione delle righe di StationData
+Season <- character(length = length(StationData$DateTime))
+
+Season[which(month(StationData$DateTime) %in% c(12, 1:2))] <- "DJF"
+Season[which(month(StationData$DateTime) %in% 3:5)]        <- "MAM"
+Season[which(month(StationData$DateTime) %in% 6:8)]        <- "JJA"
+Season[which(month(StationData$DateTime) %in% 9:11)]       <- "SON"
+
+StationData$Season <- factor(Season)
+```
+
+Posso ripetere lo stesso procedimento per dividere ad esempio in momenti della giornata.
+
+------------------------------------------------------------------------
+
+### Grafici esplorativi
+
+La funzione `geom_histogram()` crea un istogramma della variabile specificata in `aes()`. Il parametro aggiuntivo fill dentro `aes()` permettere di suddividere le colonne dell'istogramma per stagione, andando a differenziare il colore di riempimento ("fill" appunto).
+
+```{r}
+StationData %>%
+  ggplot(aes(year(DateTime), fill = Season)) + 
+  geom_histogram(binwidth = 1) + 
+  theme_bw()
+```
+
+La funzione `geom_count()` è utile per scatterplots e simili, dove c'è rischio concreto di overplotting.
+
+```{r}
+# Un esempio di grafico con la suite ggplot2 preceduta da un filtro
 StationData %>%
   filter(
     Press > 800,
@@ -117,7 +152,34 @@ StationData %>%
     outHum > 0,
     totRad > 0
   ) %>%
-ggplot(aes(hour(Time), wndSpeed, color = windGust)) + 
-  geom_count() + 
+ggplot(aes(hour(Time), wndSpeed, color = Season)) + 
+  geom_count() +
+  # geom_point() +                    # issue: overplotting
+  # geom_boxplot() +                  # dovrei cambiare la variabile in x
+  facet_wrap(~Season) +               # divido in quattro box
+  coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
   theme_bw()
+
+# si potrebbero cambiare i colori e l'ordine delle stagioni!
 ```
+
+Lo stesso grafico, usando però `geom_point()` che è affetto da overplotting. Non si capisce quali punti siano più popolati e il rendering della figura è molto rallentato (vengono disegnati inutilmente tantissimi punti).
+
+```{r}
+StationData %>%
+  filter(
+    Press > 800,
+    outTemp > -30,
+    outHum > 0,
+    totRad > 0
+  ) %>%
+ggplot(aes(hour(Time), wndSpeed, color = Season)) + 
+  geom_point() +                    # issue: overplotting
+  # geom_boxplot() +                  # dovrei cambiare la variabile in x
+  facet_wrap(~Season) +               # divido in quattro box
+  coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
+  theme_bw()
+
+```
+
+Continua...
