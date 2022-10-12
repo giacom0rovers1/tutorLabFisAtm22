@@ -19,8 +19,11 @@ setwd("C:/projects/tutorLabFisAtm22/Esp_1")
 datafolder <- "dati/"
 figfolder  <- "figure/"
 resfolder  <- "risultati/"
-# TODO ci vorrebbe un if() per crearle se non esistono...
 
+# Create the project directories, if missing
+if(!dir.exists(datafolder)){ dir.create(datafolder) }
+if(!dir.exists(figfolder)){  dir.create(figfolder) }
+if(!dir.exists(resfolder)){  dir.create(resfolder) }
 
 
 # Define the input filenames and assign them to a variable
@@ -167,6 +170,28 @@ for (i in 3:dim(StationData)[1])
     ifelse(length(ExcWS3h)==1,
            ExcWS3h <- c(i-2,i-1,i),
            ExcWS3h <- c(ExcWS3h,i-2,i-1,i))
+
+# TODO metodo alternativo (finire)
+
+
+# Elimino gli istanti in cui il vento non è nullo ma non cambia per tre ore consecutive (indice di malfunzionamento).
+
+# Voglio creare intanto un flag di continuità delle tre ore:
+  
+Diff3h <- c(rep(NA, 5), diff(windData$DateTime,lag = 5))
+windData$whole3hours <- Diff6 == 2.5
+# DiffWndSpeed <- c(NA, diff(windData$wndSpeed))
+
+windData$sameSpeed <- rollapply(windData$wndSpeed, width = 6, by = 1,
+                                FUN = function(x) length(unique(x)) == 1,
+                                align="right", 
+                                fill = NA)
+windData %>% filter(
+  wndSpeed > 0,
+  sameSpeed == T,
+  whole3hours == T
+)
+
 
 # Exclude Duplicates (i)
 ExcWS3h <- unique(ExcWS3h)
