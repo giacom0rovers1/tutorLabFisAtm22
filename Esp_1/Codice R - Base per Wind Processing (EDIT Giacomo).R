@@ -1,7 +1,9 @@
-# ===========================================================
-# = LABORATORY OF DATA PROCESSING AND EVALUATION            =
-# = Measured Wind Speed and Wind Direction      v2022.10.10 =
-# ===========================================================
+# =========================================================== #
+# = LABORATORY OF DATA PROCESSING AND EVALUATION            = #
+# = Measured Wind Speed and Wind Direction      v2022.10.10 = #
+# =========================================================== #
+
+# INIT ==============================================
 
 # Clean variables previously defined
 rm(list=ls())
@@ -11,9 +13,12 @@ require(tidyverse)
 require(lubridate)
 
 
-# READING DATA ==============================================
 # Define the working directory
-setwd("C:/projects/tutorLabFisAtm22/Esp_1")
+if(Sys.info()["sysname"]=="Linux"){
+  setwd("/home/giacom0rovers1/tutorLabFisAtm22/Esp_1/")
+}else{
+  setwd("C:/projects/tutorLabFisAtm22/Esp_1/")
+}
 
 # Define the project directories
 datafolder <- "dati/"
@@ -50,7 +55,7 @@ filenames <- list(
 )
 
 
-
+# READING DATA ==============================================
 
 # Read data as a table and assigning to the variable called 'StationData'
 StationData  <- read.table(filenames$input,
@@ -176,21 +181,21 @@ for (i in 3:dim(StationData)[1])
 
 # Elimino gli istanti in cui il vento non è nullo ma non cambia per tre ore consecutive (indice di malfunzionamento).
 
-# Voglio creare intanto un flag di continuità delle tre ore:
-  
-Diff3h <- c(rep(NA, 5), diff(windData$DateTime,lag = 5))
-windData$whole3hours <- Diff6 == 2.5
-# DiffWndSpeed <- c(NA, diff(windData$wndSpeed))
-
-windData$sameSpeed <- rollapply(windData$wndSpeed, width = 6, by = 1,
-                                FUN = function(x) length(unique(x)) == 1,
-                                align="right", 
-                                fill = NA)
-windData %>% filter(
-  wndSpeed > 0,
-  sameSpeed == T,
-  whole3hours == T
-)
+# # Voglio creare intanto un flag di continuità delle tre ore:
+#   
+# Diff3h <- c(rep(NA, 5), diff(windData$DateTime,lag = 5))
+# windData$whole3hours <- Diff6 == 2.5
+# # DiffWndSpeed <- c(NA, diff(windData$wndSpeed))
+# 
+# windData$sameSpeed <- rollapply(windData$wndSpeed, width = 6, by = 1,
+#                                 FUN = function(x) length(unique(x)) == 1,
+#                                 align="right", 
+#                                 fill = NA)
+# windData %>% filter(
+#   wndSpeed > 0,
+#   sameSpeed == T,
+#   whole3hours == T
+# )
 
 
 # Exclude Duplicates (i)

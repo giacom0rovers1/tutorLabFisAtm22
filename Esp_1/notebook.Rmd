@@ -97,10 +97,10 @@ Il metodo di definizione dei nomi delle variabili (colonne) è robusto perché h
 ```{r}
 # READING DATA
 StationData <- read_table(filenames$input,
-                            col_types = list(                        
-                              Date = col_datetime(format = "%Y%m%d"),  
-                              Time = col_time(format = "%H.%M")
-                            ),
+                          col_types = list(                        
+                            Date = col_datetime(format = "%Y%m%d"),  
+                            Time = col_time(format = "%H.%M")
+                          ),
                           comment = "#",
                           col_names = header)
 print(StationData) #%>% head()
@@ -194,7 +194,7 @@ StationData %>%
     outHum > 0,
     totRad > 0
   ) %>%
-ggplot(aes(hour(Time), wndSpeed, color = Season)) + 
+  ggplot(aes(hour(Time), wndSpeed, color = Season)) + 
   geom_count() +
   # geom_point() +                    # issue: overplotting
   # geom_boxplot() +                  # dovrei cambiare la variabile in x
@@ -214,7 +214,7 @@ StationData %>%
     outHum > 0,
     totRad > 0
   ) %>%
-ggplot(aes(hour(Time), wndSpeed, color = Season)) + 
+  ggplot(aes(hour(Time), wndSpeed, color = Season)) + 
   geom_point() +                    # issue: overplotting
   # geom_boxplot() +                  # dovrei cambiare la variabile in x
   facet_wrap(~Season) +               # divido in quattro box
@@ -233,7 +233,7 @@ StationData %>%
     outTemp > -50,
     inTemp > 0,
     totRad >=0
-    ) %>% 
+  ) %>% 
   ggplot(aes(totRad, outHum-inHum, color = outTemp-inTemp)) +
   geom_count() +
   facet_wrap(~Season) +
