@@ -12,15 +12,24 @@ output: html_notebook
 Per cominciare inizializziamo l'ambiente di calcolo: cancello eventuali variabili e carico i pacchetti necessari.
 
 ```{r}
-# clear the workspace
+# Clear the workspace
 rm(list=ls())
 ```
 
 ```{r}
-# load packages
+# Load packages
 require(tidyverse)
 require(lubridate)
 require(zoo)
+```
+
+```{r}
+# Define the working directory
+if(Sys.info()["sysname"]=="Linux"){
+  setwd("/home/giacom0rovers1/tutorLabFisAtm22/Esp_1/")
+}else{
+  setwd("C:/projects/tutorLabFisAtm22/Esp_1/")
+}
 ```
 
 ------------------------------------------------------------------------
@@ -31,9 +40,9 @@ Genero tutti i nomi dei vari output del progetto partendo dalla variabile "radic
 
 ```{r}
 # Define the project directories (relative path)
-datafolder <- "Esp_1/dati/"
-figfolder  <- "Esp_1/figure/"
-resfolder  <- "Esp_1/risultati/"
+datafolder <- "dati/"
+figfolder  <- "figure/"
+resfolder  <- "risultati/"
 
 # Create the project directories, if missing
 if(!dir.exists(datafolder)){ dir.create(datafolder) }
