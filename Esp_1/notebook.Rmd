@@ -24,7 +24,7 @@ require(zoo)
 ```
 
 ```{r}
-# Define the working directory
+# Define the working directory (in this case, the path is different depending on whether the code is executed on Linux or Windows, but just for my convenience)
 if(Sys.info()["sysname"]=="Linux"){
   setwd("/home/giacom0rovers1/tutorLabFisAtm22/Esp_1/")
 }else{
@@ -68,6 +68,8 @@ filenames <- list(
   figure.DailyWind       = paste0(figfolder, StationDataRootName, "_DailyWind.png")
 )
 ```
+Gli outputs su file leggibile (txt, csv) hanno senso solo se dobbiamo interfacciare linguaggi o software diversi, come nel caso di WRPLOT di Lakes, altrimenti conviene salvare i dati in un archivio dati compresso (in R hanno l'estensione `.RData`, equivalenti ad esempio ai `.mat` di Matlab.).
+
 
 ------------------------------------------------------------------------
 
@@ -168,7 +170,7 @@ hist(StationData$Interval)
 
 ```
 
-Quando abbiamo dati al minuto?
+Quando troviamo dati con risoluzione al minuto?
 
 ```{r}
 # istogramma con le funzioni ggplot della suite tidyverse
@@ -188,7 +190,12 @@ La funzione `geom_histogram()` crea un istogramma della variabile specificata in
 ```{r}
 StationData %>%
   ggplot(aes(year(DateTime), fill = Season)) + 
-  geom_histogram(binwidth = 1) + 
+  geom_histogram(binwidth = 1) +
+  scale_fill_manual(values = c("DJF" = "dodgerblue1",
+                               "MAM" = "springgreen3",
+                               "JJA" = "goldenrod1",
+                               "SON" = "indianred1")) +
+  # more colors at https://r-charts.com/colors/ 
   theme_bw()
 ```
 
@@ -209,6 +216,11 @@ StationData %>%
   # geom_boxplot() +                  # dovrei cambiare la variabile in x
   facet_wrap(~Season) +               # divido in quattro box
   coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
+  
+  scale_color_manual(values = c("DJF" = "dodgerblue1",
+                               "MAM" = "springgreen3",
+                               "JJA" = "goldenrod1",
+                               "SON" = "indianred1")) +
   theme_bw()
 
 ```
@@ -227,6 +239,12 @@ StationData %>%
   geom_point() +                    # issue: overplotting
   # geom_boxplot() +                  # dovrei cambiare la variabile in x
   facet_wrap(~Season) +               # divido in quattro box
+  
+  scale_color_manual(values = c("DJF" = "dodgerblue1",
+                               "MAM" = "springgreen3",
+                               "JJA" = "goldenrod1",
+                               "SON" = "indianred1")) +
+  
   coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
   theme_bw()
 
@@ -299,8 +317,10 @@ windData <- StationData %>%
     wndDir >= 0,
     wndDir <= 360
     
+    # ovviamente in questo comando posso inserire anche una selezione dell'intervallo temporale, andando ad impostare un minimo ed un massimo per DateTime
+    
   )%>%
-  select(DateTime, wndDir, wndSpeed)
+  select(DateTime, wndDir, wndSpeed, Season)
 
 print(windData)
 ```
@@ -308,28 +328,70 @@ print(windData)
 
 Elimino gli istanti in cui il vento non è nullo ma non cambia per tre ore consecutive (indice di malfunzionamento).
 ```{r}
-# Voglio creare intanto un flag di continuità delle tre ore:
-Diff3h <- c(rep(NA, 5), diff(windData$DateTime,lag = 5))
-windData$whole3hours <- Diff3h == 2.5
+# flag di continuità per 3 ore consecutive: (align = "left")
+Diff3hL <- c(as.double(diff(windData$DateTime,lag = 5)), rep(NA, 5))
 
-# poi cerco le righe in cui le velocità non cambiano per 5 intervalli, pur diverse da zero
-windData$constFlag <- rep(FALSE, length(windData$DateTime))
-for(i in 6:length(windData$DateTime)){
-  if(
-    all(!is.na(windData$whole3hours[i-5:i])) &
-    all(windData$whole3hours[i-5:i]) &
-    length(unique(windData$wndSpeed[i-5:i])) == 1
-  ){
-    windData$constFlag[i-5:i] <- T
-  }
-}
-# molto lenta, riscrivere con rollapply()
+# flag di continuità per 3 ore consecutive: (align = "right")
+Diff3hR <- c(rep(NA, 5), as.double(diff(windData$DateTime,lag = 5)))
 
-windData %>% filter(
+windData$whole3hours <- Diff3hL == 2.5 | Diff3hR == 2.5
+
+
+
+# flag di costanza della velocità in 3 ore (align = "left")
+DiffWsL <- rollapply(windData$wndSpeed,
+                    width = 6, by=1,
+                    FUN = sd,
+                    align = "left",
+                    fill  = NA)
+
+# flag di costanza della velocità in 3 ore (align = "right")
+DiffWsR <- rollapply(windData$wndSpeed,
+                    width = 6, by=1,
+                    FUN = sd,
+                    align = "right",
+                    fill  = NA)
+
+
+windData$constFlag <- DiffWsL == 0 | DiffWsR == 0 
+
+
+windData_excl <- windData %>% filter(
   wndSpeed > 0,
   constFlag == T,
   whole3hours == T
 ) %>% print()
 
+windData_filtered <- setdiff(windData, windData_excl)
+print(windData_filtered)
+
 ```
+
+
+Salvo i dataset per poterli recuperare successivamente:
+
+```{r}
+
+
+```
+
+
+
+Visualizzo un istogramma delle velocità:
+```{r}
+windData_filtered %>%
+  ggplot(aes(wndSpeed)) + 
+  geom_histogram(binwidth = 0.5,
+                 fill='lightgrey', 
+                 color='black') +
+  # scale_y_log10() +
+  theme_bw()
+
+
+```
+
+
+
+
+
 
