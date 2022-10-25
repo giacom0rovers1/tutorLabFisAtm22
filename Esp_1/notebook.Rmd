@@ -11,6 +11,10 @@ Laboratorio di Fisica dell'Atmosfera A.A. 2022/23
 
 ------------------------------------------------------------------------
 
+
+## Inizializzazione
+
+
 Per cominciare inizializziamo l'ambiente di calcolo: cancello eventuali variabili e carico i pacchetti necessari.
 
 ```{r}
@@ -20,8 +24,8 @@ rm(list=ls())
 
 ```{r}
 # Load packages
-require(tidyverse)  # for most of the things shown here
-require(zoo)        # for rolling functions (moving window)
+require(tidyverse)  # For most of the things shown here
+require(zoo)        # For rolling functions (moving window)
 
 tidyverse_logo()
 
@@ -38,11 +42,7 @@ if(Sys.info()["sysname"]=="Linux"){
 }
 ```
 
-------------------------------------------------------------------------
 
-## Inizializzazione
-
-------------------------------------------------------------------------
 
 ### Definizione dei nomi dei files e delle cartelle
 
@@ -72,22 +72,21 @@ filenames <- list(
   output.LAKES    = paste0(resfolder , StationDataRootName, "_LAKES.txt"),
   
   figure.DataConsistency = paste0(figfolder, StationDataRootName, "_DataConsistency.png"),
-  figure.HistWS          = paste0(figfolder, StationDataRootName, "_HistWS.png")#,
+  figure.HistWS          = paste0(figfolder, StationDataRootName, "_HistWS.png"),
   # figure.WindRose        = paste0(figfolder, StationDataRootName, "_WindRose.png"),
   # figure.ScatterPlot     = paste0(figfolder, StationDataRootName, "_ScatterPlot.png"),
-  # figure.DailyWind       = paste0(figfolder, StationDataRootName, "_DailyWind.png")
+  figure.DailyWind       = paste0(figfolder, StationDataRootName, "_DailyWind.png")
 )
 ```
 
 Gli outputs su file leggibile (txt, csv) hanno senso solo se dobbiamo interfacciare linguaggi o software diversi, come nel caso di WRPLOT di Lakes, altrimenti conviene salvare i dati in un archivio dati compresso (in R hanno l'estensione `.RData`, equivalenti ad esempio ai `.mat` di Matlab.).
 
-Gli outputs commentati sono prodotti dello script *Codice R - Base per Wind Processing.R* che non sono stati riprodotti qui.
+Gli outputs commentati si riferiscono a quei prodotti dello script *Codice R - Base per Wind Processing.R* che non sono stati riprodotti qui.
 
 ------------------------------------------------------------------------
 
 ## Gestione dei dati
 
-------------------------------------------------------------------------
 
 ### Correzione dell'intestazione dei files di dati delle stazioni Davis
 
@@ -130,28 +129,37 @@ StationData <- read_table(filenames$input,
                           ),
                           comment = "#",
                           col_names = header)
-StationData %>% head(40)
-dim(StationData)
 ```
 
 I dati vengono salvati direttamente in una "*tibble*", che è come un "*data.frame*" di R-base, ma potenziato, e costituisce la struttura dati fondamentale del pacchetto `tidyr` di `tidyverse`. 
 
+```{r}
+StationData %>% head(40)
+```
+
 L'output nel terminale è già tagliato in modo da non occupare troppe righe e sono incluse informazioni sui formati delle varie colonne. 
+
 La visualizzazione è interattiva e permettere di scorrere verso destra per vedere le colonne oltre la ottava (in questo caso) e in schermate successive per vedere le righe oltre la decima. 
 
 Qui sono mostrate solo le prime 40 righe per non appesantire il file html. Omettendo il comando `head(40)` è possibile visualizzare tutto il dataset e in quel caso le dimesioni riportate a schermo da `tibble` coincidono con quelle indicate da `dim(StationData)`.
+
+```{r}
+dim(StationData)
+```
 
 
 ------------------------------------------------------------------------
 
 ### Variabili aggiuntive di supporto
 
-Aggiungo colonne di supporto, non deve preoccuparci la ridondanza: la memoria viene comunque gestita in modo efficiente a questo livello di complessità. Unisco data e ora nella colonna "DateTime".
+Aggiungo alcune colonne di supporto, che risulteranno molto utili nell'analisi dei dati. Non deve preoccuparci la ridondanza: la memoria viene gestita da R in modo efficiente. Unisco data e ora nella colonna "DateTime".
+```{r}
+StationData$DateTime <- StationData$Date + StationData$Time
+```
 
 Posso richiamare le righe e le colonne del dataset non solo per numero (`1:10`) ma anche per nome, utilizzando un vettore di stringhe dei nomi delle colonne, nell'ordine in cui voglio che compaiano nell'output. Il dataset di partenza `StationData` non viene modificato.
 
 ```{r}
-StationData$DateTime <- StationData$Date + StationData$Time
 StationData[1:10, c("Date", "Time", "DateTime", "Interval", "Press")]
 ```
 
@@ -173,17 +181,17 @@ StationData$Season <- factor(Season, levels = c("DJF", "MAM", "JJA", "SON"))
 
 ### Primo sguardo ai dati
 
-La funzione `summary()` di R-base mi fornisce una caratterizzazione rapida dei dati delle variabili (colonne) di un dataframe. Vediamo che la variabile Season (l'ultima), che è un factor, viene già mostrata in termini di conteggi dei diversi livelli. Per le variabili numeriche sono mostrati gli estremi, i quartili, media e mediana.
+La funzione `summary()` di R-base mi fornisce una caratterizzazione rapida dei dati delle variabili (colonne) di un dataframe. Vediamo che la variabile "Season" (l'ultima), che è un factor, viene già mostrata in termini di conteggi dei diversi livelli. Per le variabili numeriche sono mostrati gli estremi, i quartili, media e mediana.
 
 ```{r}
 summary(StationData)
 ```
-Si nota già la necessità di filtrare buona parte delle variabili per escludere i valori senza significato fisico. Compare più volte il dato -99, probabilmente valore numerico associato ad un `NA` (not-available) dello strumento.
+Si nota già così la necessità di filtrare buona parte delle variabili per escludere i valori senza significato fisico. Compare più volte il dato -99, probabilmente valore numerico associato ad un `NA` (not-available) dello strumento.
 
 
-**Attenzione!**
+Si possono poi notare due cose a cui prestare attenzione: 
 
-1.  Le misure non sono ordinate temporalmente. Uso la nuova colonna per riordinarle:
+**1.  Le misure non sono ordinate temporalmente.** Uso la nuova colonna per riordinarle e sovrascrivo StationData con la sua versione riordinata (tramite `<-`).
 
 ```{r}
 StationData <- StationData[order(StationData$"DateTime"),]
@@ -191,10 +199,13 @@ StationData[1:10, c("Date", "Time", "DateTime", "Interval", "Press")]
 
 ```
 
-2.  Nel dataset convivono misure a diversi intervalli temporali. Lo vedo cercando i diversi valori che acquisisce la variabile "Interval":
+**2.  Nel dataset convivono misure a diversi intervalli temporali.** Lo noto facilmente facendo un po' di statistica sui diversi valori che acquisisce la variabile "Interval":
 
 ```{r}
 unique(StationData$Interval)
+```
+Vediamo ad esempio alcune righe di dati al minuto:
+```{r}
 head(StationData[which(StationData$Interval == 1),])
 ```
 
@@ -203,11 +214,10 @@ head(StationData[which(StationData$Interval == 1),])
 
 ### Filtri e subsets
 
-Tramite la funzione `filter()` del pacchetto `dplyr` (sempre di tidyverse) posso creare filtri ponendo condizioni direttamente sulle colonne del dataset originale.
+Abbiamo appena utilizzato la funzione `which()` per selezionare solo le righe corrispondenti all'avverarsi di una certa condizione logica. La sintassi di R-base mi costringe però a ripetere il nome del data.frame (o del tibble) all'interno della funzione, creando una riga di codice molto lunga e non subito leggibile, soprattutto nel caso di combinazioni di più condizioni logiche.
 
-Tramite la funzione `minute()` del pacchetto `lubridate()` seleziono solo le righe prese allo scadere dell'ora.
 
-Salvo un sottoinsieme del dataset in una nuova variabile, raccogliendo solo i dati orari. Attenzione perché la variabile "Interval" rimane impostata sulla risoluzione temporale originaria. Voglio solo misure orarie provenienti dalle letture ogni 30 minuti quindi richiedo anche che `Interval == 30`.
+Tramite la funzione `filter()` del pacchetto `dplyr` (sempre di tidyverse) posso creare filtri ponendo condizioni direttamente sulle colonne del dataset originale, senza dover ripetere quest'ultimo (grazie al pipe `%>%`) e senza utilizzare la chiamata alle righe e alle colonne del dataset tramite le parentesi quadre `[ , ]`. Il risultato è un codice molto più leggibile e facilmente modificabile.
 
 ```{r}
 HourlyData <- StationData %>%
@@ -215,13 +225,19 @@ HourlyData <- StationData %>%
     minute(DateTime) == 0,
     Interval == 30
   )
+```
 
+Tramite la funzione `minute()` del pacchetto `lubridate()` seleziono solo le righe prese allo scadere dell'ora.
+
+Salvo un sottoinsieme del dataset in una nuova variabile, raccogliendo solo i dati orari. Attenzione perché la variabile "Interval" rimane impostata sulla risoluzione temporale originaria. Voglio solo misure orarie provenienti dalle letture ogni 30 minuti quindi richiedo anche che `Interval == 30`.
+
+```{r}
 head(HourlyData)
 ```
 
 Per salvare il dataset di tutte le righe escluse potrei usare nuovamente filter impostando i filtri in modo complementare (ma diventa inutilmente complesso per filtri multipli), oppure posso usare la funzione `setdiff()` di `dplyr`. 
 
-Qui - a scopo di esempio - esplicito l'appartenenza al pacchetto per essere sicuro che non ci siano ambiguità nel caso di più funzioni con lo stesso nome.
+A scopo di esempio, ho reso esplicita l'appartenenza della funzione al suo pacchetto tramite `::`. Posso usare questa sintassi per evitare ambiguità nel caso ci siano più funzioni con lo stesso nome in pacchetti diversi.
 
 ```{r}
 excludedData <- dplyr::setdiff(StationData, HourlyData)
@@ -234,22 +250,26 @@ head(excludedData)
 
 ## Grafici esplorativi
 
-------------------------------------------------------------------------
 
 ### Istogrammi
 
-Per gli istogrammi la funzione `hist()` R-base è piuttosto valida. Il suo equivalente in ggplot è `geom_histogram`. Entrambe accettano in input variabili numeriche continue e ne fanno il binning. 
-Per variabili discrete, ad esempio un factor di Intervals (considerati quindi etichette piuttosto che valori numerici), ggplot ci mette a disposizione la funzione `geom_bar`.
+Per gli istogrammi la funzione `hist()` R-base è veloce e potente. Il suo equivalente in ggplot è `geom_histogram`, ma in questo caso è la seconda ad essere leggermente meno intuitiva nella chiamata. Entrambe accettano in input variabili numeriche continue e ne fanno il binning. 
+
+Per variabili discrete, ad esempio un factor di Intervals (dove cioè gli intervalli sono considerati etichette piuttosto che valori numerici), ggplot ci mette a disposizione la funzione `geom_bar`.
 
 
-Utilizziamole per rispondere ad alcune domande per iniziare ad esplorare i dati.
+Utilizziamo queste funzioni per rispondere ad alcune domande preliminari. Per esempio:
 
-1. Come si distribuiscono le diverse risoluzioni temporali?
+
+**1. Come si distribuiscono le diverse risoluzioni temporali?**
 
 ```{r}
 # istogramma con le funzioni base di R
 hist(StationData$Interval)
+```
+Qui Intervals conserva il suo valore numerico, lo vediamo dalla spaziatura dell'asse x.
 
+```{r}
 # istogramma con ggplot di tidyverse
 ggplot(StationData, aes(as.factor(Interval))) + 
   geom_bar(fill='lightgrey', 
@@ -257,10 +277,12 @@ ggplot(StationData, aes(as.factor(Interval))) +
   theme_classic()
 
 ```
-La maggior parte dei dati è alla mezz'ora, ma c'è un gruppo consistente anche a 5 minuti.
+Qui invece Interval è giusto un'etichetta con la quale classificare i dati: le colonne dell'istogramma sono una accanto all'altra a prescindere dal valore dell'asse x.
 
 
-2. Quando troviamo dati con risoluzione al minuto?
+*La maggior parte dei dati è alla mezz'ora, ma c'è un gruppo consistente anche a 5 minuti.*
+
+**2. Quando troviamo dati con risoluzione al minuto?**
 
 ```{r warning=FALSE}
 # istogramma con le funzioni base di R
@@ -269,7 +291,12 @@ hist(StationData$DateTime[StationData$Interval==1],
      xlab = "DateTime",    # x-axis label
      freq = T,             # switch to counts
      density = 40)         # grey-like fill (graphical parameter)
+```
+L'istogramma base per una variabile POSIXct è leggermente diverso da quello predefinito per una variabile numerica (si veda `?hist.POSIXt` contrapposto a `?hist` o `?hist.default`)
 
+La funzione `geom_histogram()` crea un istogramma della variabile specificata in `aes()`, che può essere specificata nella chiamata principale di `ggplot()` o anche all'interno della funzione istogramma (la cosa ha effetti diversi solo in grafici con chiamate multiple alle funzioni grafiche).
+
+```{r warning=FALSE}
 # istogramma con le funzioni ggplot di tidyverse
 StationData %>% 
   filter(
@@ -283,12 +310,10 @@ StationData %>%
 
 ```
 
-Le misure al minuto finiscono nel 2011.
+*Le misure al minuto terminano nel 2011.*
 
 
-La funzione `geom_histogram()` crea un istogramma della variabile specificata in `aes()`. Il parametro aggiuntivo fill dentro `aes()` permettere di suddividere le colonne dell'istogramma per stagione, andando a differenziare il colore di riempimento ("fill" appunto). I colori possono essere specificati con la famiglia di funzioni `scale_`. In questo caso per inserire i colori del riempimento manualmente uso `scale_fill_manual`.
-
-3. Come sono distribuiti i dati alla mezz'ora rispetto ad anno e stagione?
+**3. Come sono distribuiti i dati alla mezz'ora rispetto ad anno e stagione?**
 
 ```{r}
 StationData %>%
@@ -304,14 +329,15 @@ StationData %>%
                                "SON" = "indianred1")) +
   theme_bw()
 ```
+Il parametro aggiuntivo `fill` dentro `aes()` permettere di suddividere le colonne dell'istogramma per stagione, andando a differenziare il colore di riempimento ("fill" appunto). I colori possono essere specificati con la famiglia di funzioni `scale_`. In questo caso per inserire i colori del riempimento manualmente uso `scale_fill_manual`.
 
-Si noti un funzionamento discontinuo negli anni dal 2011 al 2013, mentre dal 2008 al 2010 e soprattutto dal 2014 al 2016 i dati sono uniformemente distribuiti tra le annate e le stagioni, per poi peggiorare leggermente negli anni più recenti.
+*Si noti un funzionamento discontinuo negli anni dal 2011 al 2013, mentre dal 2008 al 2010 e soprattutto dal 2014 al 2016 i dati sono uniformemente distribuiti tra le annate e le stagioni, per poi peggiorare leggermente negli anni più recenti.*
 
 ------------------------------------------------------------------------
 
 ### Scatterplots
 
-La funzione `geom_count()` è utile per scatterplots e simili, dove c'è rischio concreto di overplotting.
+La funzione `geom_count()` è utile per scatterplots e simili, dove c'è rischio concreto di *overplotting*.
 
 ```{r}
 # Un esempio di grafico con la suite ggplot2 preceduta da un filtro
@@ -325,8 +351,6 @@ StationData %>%
   ) %>%
   ggplot(aes(hour(Time), wndSpeed, color = Season)) + 
   geom_count() +
-  # geom_point() +                    # issue: overplotting
-  # geom_boxplot() +                  # dovrei cambiare la variabile in x
   facet_wrap(~Season) +               # divido in quattro box
   coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
   
@@ -334,6 +358,7 @@ StationData %>%
                                 "MAM" = "springgreen3",
                                 "JJA" = "goldenrod1",
                                 "SON" = "indianred1")) +
+  scale_size_area() +   # ensures that counts of zero would be given size 0
   theme_bw()
 
 ```
@@ -350,21 +375,19 @@ StationData %>%
     totRad > 0
   ) %>%
   ggplot(aes(hour(Time), wndSpeed, color = Season)) + 
-  geom_point() +                    # issue: overplotting
-  # geom_boxplot() +                  # dovrei cambiare la variabile in x
+  geom_point() +                      # issue: overplotting
   facet_wrap(~Season) +               # divido in quattro box
+  coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
   
   scale_color_manual(values = c("DJF" = "dodgerblue1",
                                 "MAM" = "springgreen3",
                                 "JJA" = "goldenrod1",
                                 "SON" = "indianred1")) +
-  
-  coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
   theme_bw()
 
 ```
 
-Scatterplot che mette tre variabili a confronto...
+Posso usare queste funzioni per mettere in relazione anche più di due variabili, sfruttando ad esempio una scala colore mappata in modo continuo su una terza grandezza. Anche in questo caso (come per il fill funzione della stagione), la specifica andrà inserita dentro ad `aes()`. Posso usare anche combinazioni di più variabili, sia sugli assi cartesiani, sia su quelli colore. Di seguito un grafico di esempio, senza particolare valore fisico:
 
 ```{r}
 StationData %>% 
@@ -379,12 +402,8 @@ StationData %>%
   ggplot(aes(totRad, outHum-inHum, color = outTemp-inTemp)) +
   geom_count() +
   facet_wrap(~Season) +
-  scale_color_gradient2() + 
-  # coord_cartesian(xlim = c(0,100)) + 
-  # coord_fixed(
-  #   xlim=c(0,20),
-  #   ylim=c(0,20)
-  #   ) +
+  scale_color_gradient2() +   # diverging scale (red-blue) with white in the middle
+  scale_size_area() +         # ensures that counts of zero would be given size 0
   theme_bw()
 
 ```
@@ -394,22 +413,33 @@ StationData %>%
 
 ## Lavoro sui dati di VENTO
 
-------------------------------------------------------------------------
+### Selezione dell'intervallo temporale
 
-Imposto gli estremi dell'intervallo temporale di interesse tramite la funzione `as.POSIXct`, specificando il formato in cui fornisco la stringa e il fuso orario (IMPORTANTE! di default verrebbe registrato come CET, ma meglio lavorare in UTC).
-
-Ho scelto gli anni 2014, 2015 e 2016 perché nell'istogramma esplorativo della distribuzione dei dati sono tre anni con un alto numero di dati, distribuito uniformemente tra le annate e tra le stagioni. Nel caso di un'analisi stagionale questo mi garantisce la necessaria omogeneità del dataset, mentre tre anni consecutivi permettono già di filtrare un po' di segnale casuale della singola annata.
+Imposto gli estremi dell'intervallo temporale di interesse tramite la funzione `as.POSIXct` che converte stringhe testuali in date e ore, specificando il formato in cui fornisco la stringa e il fuso orario (IMPORTANTE! di default verrebbe registrato come CET, ma meglio lavorare in UTC). 
 
 ```{r}
 # Uso le funzioni base:
 startTime <- as.POSIXct("201401010030", format = "%Y%m%d%H%M", tz = "UTC")
 endTime   <- as.POSIXct("201701010000", format = "%Y%m%d%H%M", tz = "UTC")
 
-# oppure quelle offerte dal pacchetto lubridate di tidyverse:
-ymd_hm("201401010030")
-ymd_hm("201701010000")
-
+startTime
 ```
+
+Se utilizzo le funzioni di tidyverse formato e timezone sono già impostati di default.
+
+```{r}
+# oppure quelle offerte dal pacchetto lubridate di tidyverse:
+startTime <- ymd_hm("201401010030")
+endTime   <- ymd_hm("201701010000")
+
+startTime
+```
+
+Ho scelto gli anni 2014, 2015 e 2016 perché nell'istogramma esplorativo della distribuzione dei dati sono tre anni con un alto numero di dati, distribuito uniformemente tra le annate e tra le stagioni. Nel caso di un'analisi stagionale questo mi garantisce la necessaria omogeneità del dataset, mentre tre anni consecutivi permettono già di filtrare un po' di segnale casuale della singola annata.
+
+--------------------------------------------------------------------
+
+### Filtro semplice
 
 Filtro i valori non verosimili della velocità del vento per l'intervallo prescelto.
 
@@ -425,7 +455,7 @@ windData <- StationData %>%
     wndSpeed <= 25,
     
     wndDir >= 0,
-    wndDir <= 360
+    wndDir < 360
     
   )%>%
   select(DateTime, wndDir, wndSpeed, Season)
@@ -433,23 +463,37 @@ windData <- StationData %>%
 windData %>% head(20)
 ```
 
-Elimino gli istanti in cui il vento non è nullo e non cambia per tre ore consecutive (indice di probabile malfunzionamento dello strumento). Per farlo evito di usare `if` e `for` concatenati. Piuttosto creo dei flag di supporto tramite funzioni ottimizzate a finestra mobile (dal pacchetto `zoo`).
 
-Flag sx e dx, poi passati in OR
+---------------------------------------------------------------------------
 
-Da progettare per wndDir tenendo conto della chiusura degli angoli giri
+### Filtro sulla persistenza
+
+Elimino gli istanti in cui il vento non è nullo e non cambia per tre ore consecutive (comportamento indice di un probabile malfunzionamento dello strumento). Per farlo evito di usare `if` e `for` concatenati. Piuttosto creo dei vettori logici di supporto tramite funzioni ottimizzate a finestra mobile (dal pacchetto `zoo`) e li utilizzo per filtrare le righe. Vediamo:
+
+
+Tramite la funzione `diff()` (R-base) calcolo lo step temporale tra righe distanti 5 posizioni (ovvero 2.5 ore, per un tot di 3h se consideriamo la riga selezionata). Se la serie temporale non è continua, il risultato sarà diverso da 2.5.
 
 ```{r}
+Diff3h <- as.double(diff(windData$DateTime,lag = 5))
+```
+
+La funzione `diff()` restituisce, nelle impostazioni di default, un vettore di lunghezza pari al vettore originale meno il valore del lag, perché non considera sottoinsiemi del vettore minori del lag. Nel ritornare alla lunghezza originaria, apponendo dei `NA`, creo due versioni: una con "allineamento" dei risultati a destra dei valori selezionati, una a sinistra. 
+```{r}
 # flag di continuità per 3 ore consecutive: (align = "left")
-Diff3hL <- c(as.double(diff(windData$DateTime,lag = 5)), rep(NA, 5))
+Diff3hL <- c(Diff3h, rep(NA, 5))
 
 # flag di continuità per 3 ore consecutive: (align = "right")
-Diff3hR <- c(rep(NA, 5), as.double(diff(windData$DateTime,lag = 5)))
+Diff3hR <- c(rep(NA, 5), Diff3h)
+```
 
+L'operazione logica OR tra questi due vettori mi restituisce un flag di appartenenza ad una serie di 6 misure consecutive, a prescindere che siano prima o dopo l'intervallo selezionato.
+```{r}
 windData$whole3hours <- Diff3hL == 2.5 | Diff3hR == 2.5
+```
 
 
-
+Per creare un flag di costanza del vento, calcolo la deviazione standard in una finestra moble di sei righe (`width = 6`), che si sposta riga per riga (`by = 1`). Anche in questo caso creo due versioni del flag, una che restituisce il risultato allineato alla sinistra della finestra mobile, una alla sua destra. Il flag sarà nuovamente l'OR delle due.
+```{r}
 # flag di costanza della velocità in 3 ore (align = "left")
 DiffWsL <- rollapply(windData$wndSpeed,
                      width = 6, by=1,
@@ -465,9 +509,15 @@ DiffWsR <- rollapply(windData$wndSpeed,
                      fill  = NA)
 
 
-windData$constFlag <- DiffWsL == 0 | DiffWsR == 0 
+windData$constFlag <- DiffWsL == 0 | DiffWsR == 0
+```
 
 
+Viene lasciato da implementare lo stesso tipo di filtro per wndDir, dove si dovrà tenere conto della chiusura su sé stesso dell'angolo giro (360° --> 0°) e di come la risoluzione angolare impatti sulle condizioni di persistenza.
+
+I dati da escludere sono quelli per i quali entrambi i flag siano `TRUE` e la velocità del vento non sia nulla (periodi di calma di vento persistenti non sono considerati inattendibili).
+
+```{r}
 windData_excl <- windData %>% filter(
   wndSpeed > 0,
   constFlag == T,
@@ -477,76 +527,220 @@ windData_excl <- windData %>% filter(
 head(windData_excl, 20)
 ```
 
-Creo il dataset filtrato per esclusione:
+Per esclusione tramite `setdiff()` creo il dataset filtrato, su cui lavorare.
 ```{r}
 windData_filtered <- setdiff(windData, windData_excl)
 
 head(windData_filtered, 20)
 ```
 
-Salvo i dataset per poterli recuperare successivamente:
+----------------------------------------------------------------------------
+
+### Visualizzazione
+
+#### Istogramma delle velocità del vento
+Visualizzo ora un istogramma delle velocità filtrate. Posso salvare la chiamata a `ggplot()` in una variabile e stamparla in un secondo momento.
 
 ```{r}
-
-save(windData_filtered, windData_excl, file = paste0(resfolder, "windData.RData"))
-```
-
-Il file `.RData` pesa molto meno dei files txt o csv e viene letto e scritto più rapidamente.
-
-Visualizzo un istogramma delle velocità filtrate:
-
-```{r}
-windData_filtered %>%
+fig1 <- windData_filtered %>%
+  
   ggplot(aes(wndSpeed)) + 
+  
   geom_histogram(binwidth = 0.5,
-                 fill='lightgrey', 
+                 fill='lightskyblue', 
                  color='black') +
-  # scale_y_log10() +
+  stat_bin(binwidth=0.5, geom="text", aes(label=..count..), vjust=-0.3) +
+  # scale_y_log10() +                  # logarithmic Y axis
   theme_bw()
 
+fig1
+
+```
+Una volta salvata una figura, posso aggingere dei blocchi semplicemente con un `+`. Se non riassegno il risultato a `fig1`, il suo contenuto non cambia.
+```{r}
+
+fig1 + facet_wrap(~Season)
 
 ```
 
-Visualizzo un istogramma della "consistency":
 
-Utilizzo la funzione seq() per creare una sequenza di tutti gli intervalli temporali compresi tra `startTime` e `endTime`
+#### Consistency plot
+
+Visualizzo un istogramma della "consistency", intesa come percentuali di istanti di funzionamento della strumentazione (dati validi) rispetto al totale degli istanti disponibili.
+
+
+Utilizzo la funzione seq() per creare una sequenza di tutti gli intervalli temporali compresi tra `startTime` e `endTime`. R gestisce automaticamente il calendario (lunghezza dei vari mesi, anni bisestili, ecc..).
 
 ```{r}
 totalTime <- seq(startTime, endTime, by="30 min")
 ```
 
-Posso usare la funzione `hist()` anche per ricavare bining di variabili continue, impostando `plot = F` e assegnando il risultato ad una variabile.
-```{r}
-monthsTotIntervals <- hist(month(totalTime), 
-                           plot = F, 
-                           breaks = 0.5:12.5)
+Posso usare la funzione `hist()` anche per ricavare binning di variabili continue, impostando `plot = F` e assegnando il risultato ad una nuova variabile. Per fare la stessa cosa con le funzioni di tidyverse invece dovrei cambiare la chiamata da `geom_histogram()` a `stat_bin()` (vedi `?geom_freqpoly`).
 
-monthsPopulated    <- hist(month(windData_filtered$DateTime), 
-                           plot = F, 
-                           breaks = 0.5:12.5)
+```{r}
+monTot <- hist(month(totalTime), 
+               plot = F, 
+               breaks = 0.5:12.5)
+plot(monTot)
 ```
 
+Ripeto per la serie temporale degli intervalli del dataset filtrato.
 
 ```{r}
-tibble(Months = as.factor(monthsPopulated$mids), 
-             `Valid data (%)` = 100*monthsPopulated$counts/monthsTotIntervals$counts) %>%
+monPop    <- hist(month(windData_filtered$DateTime), 
+                  plot = F, 
+                  breaks = 0.5:12.5)
+```
+
+Creo l'istogramma delle percentuali di dati validi suddivise per mese.
+
+In R posso indicare il risultato di un'operazione direttamente come colonna di una tibble, che a sua volta viene passata dal pipe `%>%` come variabile `data` per `ggplot`. 
+
+I nomi di colonne con caratteri speciali (in questo caso: spazi, parentesi e simbolo di percentuale) devono essere scritti tra accenti "`" per funzionare nelle chiamate di aes(). In questo modo la sintassi è leggermente più complessa ma l'etichetta degli assi è già pronta in formato leggibile e con l'unità di misura (in questo caso "%").
+
+```{r}
+fig2 <- tibble(Months = as.factor(monPop$mids), 
+               `Valid data (%)` = 100*monPop$counts/monTot$counts) %>%
+  
   ggplot(aes(Months, `Valid data (%)` )) + 
-  geom_col(fill='lightgrey', 
+  
+  geom_col(fill='dodgerblue3', 
            color='black') +
-  coord_cartesian(ylim = c(75,100)) + # zoom at high percentages
+  geom_text(aes(label=round(`Valid data (%)`, 2)), vjust=-0.4) +
+  coord_cartesian(ylim = c(80,100)) + # zoom at high percentages
   theme_bw() 
 
+fig2
+
 ```
 
-TODO SALVARE LE FIGURE! ggsave
+-------------------------------------------------------------------------
+### Manipolazione dei dati
+
+Con le funzioni `group_by()` e `summarise()` di `dplyr` posso fare in pochi istanti operazione e statistiche su variabili aggregate. Calcolo qui ad esempio le velocità medie giornaliere, raggruppando secondo `date(DateTime)`. Questo comando permette di identificare univocamente ogni giornata ed aggregare le ore all'interno di essa.
+
+Attenzione perché se invece avessimo usato ad esempio `day(DateTime)`, il programma andrebbe a raggruppare assieme tutti i giorni 1, 2, 3, etc.. di ogni mese, perdendo la differenziazione mensile ed annuale (avremo cioè un dataset finale di 31 righe). Fondamentale quindi è individuare il parametro corretto su cui raggruppare.
+
+```{r}
+windData_filtered %>% 
+  group_by(date(DateTime)) %>%
+  summarise(DailyAvg = mean(wndSpeed)) %>% head(10)
+
+```
+
+#### Daily Wind
+
+Utilizzo queste funzioni di manipolazione per ottenere rapidamente la figura "DailyWind" dove si analizza il ciclo diurno/notturno del vento. In questo caso il parametro di raggruppamento è `hour(DateTime)` e le statistiche necessarie sono la media e la deviazione standard del vento e la media delle direzioni (da interpretare però con attenzione..).
+
+Aggiungo un coefficiente di scaling per mostrare entrambe le grandezze nello stesso plot.
+
+```{r message=FALSE, warning=FALSE}
+vmax  <- 2                          # fixed max value for y-axis
+coeff <- 360/vmax                   # scaling of the second axis and variable
+
+fig3 <- windData_filtered %>% 
+  group_by(
+    hour(DateTime)
+  ) %>%
+  summarise(
+    HourlyAvg = mean(wndSpeed),
+    HourlyStDev = sd(wndSpeed),
+    HourlyWDir = mean(wndDir),
+  ) %>% 
+  
+  ggplot(aes(`hour(DateTime)`, HourlyAvg)) + 
+  geom_line() + 
+  geom_point() +
+  geom_line(aes(y=HourlyStDev), linetype = "dashed") + 
+  geom_line(aes(y=HourlyWDir/coeff), color = "red") + 
+  
+  coord_cartesian(ylim = c(0, vmax)) + 
+  scale_y_continuous(
+    name     = "Hourly wind (m/s): average (solid) and sd (dashed)",
+    sec.axis = sec_axis(~.*coeff, name="Hourly mean wind direction (°)") 
+  ) +
+  
+  theme_bw() + 
+  theme(
+    axis.title.y.right = element_text(color = "red"),
+    axis.text.y.right  = element_text(color = "red"),
+    axis.ticks.y.right = element_line(color = "red")
+  )
+
+fig3
+
+```
 
 
+In questo caso, per differenziare secondo la stagione non basta aggiungere `+ facet_wrap(~Season)` perché la variabile Season non è stata conservata da `summarise()`. Bisogna quindi riscrivere la funzione, aggiungendo Season in `group_by()`.
+
+```{r message=FALSE, warning=FALSE}
+
+windData_filtered %>% 
+  group_by(
+    hour(DateTime), 
+    Season                     # now the Season information is kept
+  ) %>%
+  summarise(
+    HourlyAvg = mean(wndSpeed),
+    HourlyStDev = sd(wndSpeed),
+    HourlyWDir = mean(wndDir),
+  ) %>% 
+  
+  ggplot(aes(`hour(DateTime)`, HourlyAvg)) + 
+  geom_line() + 
+  geom_point() +
+  geom_line(aes(y=HourlyStDev), linetype = "dashed") + 
+  geom_line(aes(y=HourlyWDir/coeff), color = "red") + 
+  
+  facet_wrap(~Season) +        # and the plot faceting works
+  
+  coord_cartesian(ylim = c(0, vmax)) + 
+  scale_y_continuous(
+    name     = "Hourly wind (m/s): average (solid) and sd (dashed)",
+    sec.axis = sec_axis(~.*coeff, name="Hourly mean wind direction (°)") 
+  ) +
+  
+  theme_bw() + 
+  theme(
+    axis.title.y.right = element_text(color = "red"),
+    axis.text.y.right  = element_text(color = "red"),
+    axis.ticks.y.right = element_line(color = "red")
+  )
+
+```
 
 
-TODO medie orarie o giornaliere con groupby e summarize
+------------------------------------------------------------------------
+
+### Outputs
+
+#### RData
+
+Salvo i dataset (escluso e filtrato) per poterli recuperare successivamente. Posso salvare più variabili nello stesso archivio compresso tramite la funzione `save()`.
+
+```{r}
+save(windData_filtered, windData_excl, file = paste0(resfolder, "windData.RData"))
+```
+
+Il file `.RData` pesa molto meno dei files txt o csv e viene letto e scritto più rapidamente.
 
 
+#### PNG
 
+Salvo le figure in formato PNG tramite la funzione `ggsave()`, richiamando le variabili dei plot salvate precedentemente. Alternativamente potrei chiamare ggsave() appena dopo ogni plot, senza specificare il parametro `plot` che di default ha il valore `last_plot()`, cioè salva l'ultima figura creata da `ggplot()`.
+
+```{r}
+ggsave(filenames$figure.HistWS, plot = fig1)
+
+ggsave(filenames$figure.DataConsistency, plot = fig2)
+
+ggsave(filenames$figure.DailyWind, plot = fig3)
+
+```
+
+
+#### ASCII txt (per WRPLOT)
 
 Converto i dati nel formato richiesto dal software per la visualizzazione interattiva delle rose dei venti:
 ```{r}
@@ -560,15 +754,14 @@ toLAKES <- tibble(
   
   Dir  = round(windData_filtered$wndDir,digits=0),           # Rounded Wind Direction
   WS   = round(1.94384*windData_filtered$wndSpeed,digits=0)  # Rounded Wind Speed 
-                                                             # (1 knot = 1.94384 m/s)
+  # (1 knot = 1.94384 m/s)
 )
 
 head(as.matrix(toLAKES))
 ```
 
+Preparo il file di output con lintestazione e scrivo i dati. Il parametro `append = TRUE` mi garantisce che l'intestazione non venga sovrascritta.
 
-
-Preparo il file di output e scrivo i dati:
 ```{r}
 # Append the "LAKES FORMAT" string at the beginning of the file
 fileConn<-file(paste0(resfolder, StationDataRootName,"_LAKES.txt"))
@@ -580,3 +773,17 @@ write.table(toLAKES, paste0(resfolder, StationDataRootName,"_LAKES.txt"),
             sep = " ", row.names=FALSE, col.names=FALSE, append =TRUE)
 
 ```
+
+
+
+### Statistiche (portare su dopo visualizzazione)
+
+TODO
+Statistiche, fit lineari e scatterplot quadrati con bisettrice e fit
+
+coord_cartesian(xlim = c(0,100)) + 
+coord_fixed(
+xlim=c(0,20),
+ylim=c(0,20)
+) +
+
