@@ -3,9 +3,11 @@ title: "Wind processing with tidyverse - R Notebook"
 output: html_notebook
 ---
 
-## Esperienza 1 - Laboratorio di Fisica dell'Atmosfera A.A. 2022/23
-
 **Autore**: Giacomo Roversi
+
+Laboratorio di Fisica dell'Atmosfera A.A. 2022/23
+
+# Esperienza 1
 
 ------------------------------------------------------------------------
 
@@ -18,13 +20,13 @@ rm(list=ls())
 
 ```{r}
 # Load packages
-require(tidyverse)
-require(zoo)
+require(tidyverse)  # for most of the things shown here
+require(zoo)        # for rolling functions (moving window)
 
-# To see what packages are part of tidyverse:
 tidyverse_logo()
-tidyverse_packages()
 
+# To see which packages are part of tidyverse:
+tidyverse_packages()
 ```
 
 ```{r}
@@ -35,6 +37,10 @@ if(Sys.info()["sysname"]=="Linux"){
   setwd("C:/projects/tutorLabFisAtm22/Esp_1/")
 }
 ```
+
+------------------------------------------------------------------------
+
+## Inizializzazione
 
 ------------------------------------------------------------------------
 
@@ -66,14 +72,20 @@ filenames <- list(
   output.LAKES    = paste0(resfolder , StationDataRootName, "_LAKES.txt"),
   
   figure.DataConsistency = paste0(figfolder, StationDataRootName, "_DataConsistency.png"),
-  figure.HistWS          = paste0(figfolder, StationDataRootName, "_HistWS.png"),
-  figure.WindRose        = paste0(figfolder, StationDataRootName, "_WindRose.png"),
-  figure.ScatterPlot     = paste0(figfolder, StationDataRootName, "_ScatterPlot.png"),
-  figure.DailyWind       = paste0(figfolder, StationDataRootName, "_DailyWind.png")
+  figure.HistWS          = paste0(figfolder, StationDataRootName, "_HistWS.png")#,
+  # figure.WindRose        = paste0(figfolder, StationDataRootName, "_WindRose.png"),
+  # figure.ScatterPlot     = paste0(figfolder, StationDataRootName, "_ScatterPlot.png"),
+  # figure.DailyWind       = paste0(figfolder, StationDataRootName, "_DailyWind.png")
 )
 ```
+
 Gli outputs su file leggibile (txt, csv) hanno senso solo se dobbiamo interfacciare linguaggi o software diversi, come nel caso di WRPLOT di Lakes, altrimenti conviene salvare i dati in un archivio dati compresso (in R hanno l'estensione `.RData`, equivalenti ad esempio ai `.mat` di Matlab.).
 
+Gli outputs commentati sono prodotti dello script *Codice R - Base per Wind Processing.R* che non sono stati riprodotti qui.
+
+------------------------------------------------------------------------
+
+## Gestione dei dati
 
 ------------------------------------------------------------------------
 
@@ -86,12 +98,12 @@ connection <- file(filenames$input)
 open(connection)
 
 header <- strsplit(readLines(connection, 1), ",")[[1]] %>% 
-  str_replace("#", "")     %>%   
+  str_replace("#"    , "") %>%   
   str_replace("     ", "") %>%
-  str_replace("    ", "")  %>%
-  str_replace("   ", "")   %>%
-  str_replace(" ", "")     %>%
-  str_replace(" ", "")
+  str_replace("    " , "") %>%
+  str_replace("   "  , "") %>%
+  str_replace(" "    , "") %>%
+  str_replace(" "    , "")
 
 close(connection)
 
@@ -118,23 +130,32 @@ StationData <- read_table(filenames$input,
                           ),
                           comment = "#",
                           col_names = header)
-print(StationData) #%>% head()
+StationData %>% head(40)
+dim(StationData)
 ```
 
-I dati vengono salvati direttamente in una "*tibble*", che è un "*data.frame*" - ma potenziato - che costituisce la struttura dati di base del pacchetto `tidyr` di `tidyverse`. L'output nel terminale è già tagliato in modo da non occupare troppe righe e sono incluse informazioni sui formati delle varie colonne. La visualizzazione è interattiva e permettere di scorrere verso destra per vedere le colonne oltre la decima.
+I dati vengono salvati direttamente in una "*tibble*", che è come un "*data.frame*" di R-base, ma potenziato, e costituisce la struttura dati fondamentale del pacchetto `tidyr` di `tidyverse`. 
+
+L'output nel terminale è già tagliato in modo da non occupare troppe righe e sono incluse informazioni sui formati delle varie colonne. 
+La visualizzazione è interattiva e permettere di scorrere verso destra per vedere le colonne oltre la ottava (in questo caso) e in schermate successive per vedere le righe oltre la decima. 
+
+Qui sono mostrate solo le prime 40 righe per non appesantire il file html. Omettendo il comando `head(40)` è possibile visualizzare tutto il dataset e in quel caso le dimesioni riportate a schermo da `tibble` coincidono con quelle indicate da `dim(StationData)`.
+
 
 ------------------------------------------------------------------------
 
 ### Variabili aggiuntive di supporto
 
-Aggiungo colonne di supporto, non deve preoccuparmi la ridondanza, la memoria viene comunque gestita in modo efficiente a questo livello. Unisco data e ora nella colonna "DateTime".
+Aggiungo colonne di supporto, non deve preoccuparci la ridondanza: la memoria viene comunque gestita in modo efficiente a questo livello di complessità. Unisco data e ora nella colonna "DateTime".
+
+Posso richiamare le righe e le colonne del dataset non solo per numero (`1:10`) ma anche per nome, utilizzando un vettore di stringhe dei nomi delle colonne, nell'ordine in cui voglio che compaiano nell'output. Il dataset di partenza `StationData` non viene modificato.
 
 ```{r}
 StationData$DateTime <- StationData$Date + StationData$Time
-head(StationData[,c("Date", "Time", "DateTime", "Interval", "Press")])
+StationData[1:10, c("Date", "Time", "DateTime", "Interval", "Press")]
 ```
 
-Poi creo una colonna di "factors" per la divisione in stagioni meteorologiche. I factor sono un formato di variabili in R, sono delle etichette predisposte per acquisire solo valori preimpostati, detti "livelli" (vedi `?factor`).
+Poi creo una colonna di "factors" per la divisione in stagioni meteorologiche. I factor sono un formato di variabili di R: sono delle etichette predisposte per acquisire solo valori preimpostati, detti "livelli" (vedi `?factor`). 
 
 ```{r}
 # creo un vettore caratteri vuoto, della dimensione delle righe di StationData
@@ -148,36 +169,108 @@ Season[which(month(StationData$DateTime) %in% 9:11)]       <- "SON"
 StationData$Season <- factor(Season, levels = c("DJF", "MAM", "JJA", "SON"))
 ```
 
+------------------------------------------------------------------------
+
+### Primo sguardo ai dati
+
+La funzione `summary()` di R-base mi fornisce una caratterizzazione rapida dei dati delle variabili (colonne) di un dataframe. Vediamo che la variabile Season (l'ultima), che è un factor, viene già mostrata in termini di conteggi dei diversi livelli. Per le variabili numeriche sono mostrati gli estremi, i quartili, media e mediana.
+
+```{r}
+summary(StationData)
+```
+Si nota già la necessità di filtrare buona parte delle variabili per escludere i valori senza significato fisico. Compare più volte il dato -99, probabilmente valore numerico associato ad un `NA` (not-available) dello strumento.
+
+
 **Attenzione!**
 
 1.  Le misure non sono ordinate temporalmente. Uso la nuova colonna per riordinarle:
+
 ```{r}
 StationData <- StationData[order(StationData$"DateTime"),]
-head(StationData[,c("Date", "Time", "DateTime", "Interval", "Press")])
+StationData[1:10, c("Date", "Time", "DateTime", "Interval", "Press")]
 
 ```
 
 2.  Nel dataset convivono misure a diversi intervalli temporali. Lo vedo cercando i diversi valori che acquisisce la variabile "Interval":
+
 ```{r}
 unique(StationData$Interval)
-StationData[which(StationData$Interval == 1),]
+head(StationData[which(StationData$Interval == 1),])
 ```
+
 
 ------------------------------------------------------------------------
 
-### Grafici esplorativi
+### Filtri e subsets
 
-Come si distribuiscono le diverse risoluzioni temporali?
+Tramite la funzione `filter()` del pacchetto `dplyr` (sempre di tidyverse) posso creare filtri ponendo condizioni direttamente sulle colonne del dataset originale.
+
+Tramite la funzione `minute()` del pacchetto `lubridate()` seleziono solo le righe prese allo scadere dell'ora.
+
+Salvo un sottoinsieme del dataset in una nuova variabile, raccogliendo solo i dati orari. Attenzione perché la variabile "Interval" rimane impostata sulla risoluzione temporale originaria. Voglio solo misure orarie provenienti dalle letture ogni 30 minuti quindi richiedo anche che `Interval == 30`.
+
+```{r}
+HourlyData <- StationData %>%
+  filter(
+    minute(DateTime) == 0,
+    Interval == 30
+  )
+
+head(HourlyData)
+```
+
+Per salvare il dataset di tutte le righe escluse potrei usare nuovamente filter impostando i filtri in modo complementare (ma diventa inutilmente complesso per filtri multipli), oppure posso usare la funzione `setdiff()` di `dplyr`. 
+
+Qui - a scopo di esempio - esplicito l'appartenenza al pacchetto per essere sicuro che non ci siano ambiguità nel caso di più funzioni con lo stesso nome.
+
+```{r}
+excludedData <- dplyr::setdiff(StationData, HourlyData)
+head(excludedData)
+```
+
+
+
+------------------------------------------------------------------------
+
+## Grafici esplorativi
+
+------------------------------------------------------------------------
+
+### Istogrammi
+
+Per gli istogrammi la funzione `hist()` R-base è piuttosto valida. Il suo equivalente in ggplot è `geom_histogram`. Entrambe accettano in input variabili numeriche continue e ne fanno il binning. 
+Per variabili discrete, ad esempio un factor di Intervals (considerati quindi etichette piuttosto che valori numerici), ggplot ci mette a disposizione la funzione `geom_bar`.
+
+
+Utilizziamole per rispondere ad alcune domande per iniziare ad esplorare i dati.
+
+1. Come si distribuiscono le diverse risoluzioni temporali?
+
 ```{r}
 # istogramma con le funzioni base di R
 hist(StationData$Interval)
 
+# istogramma con ggplot di tidyverse
+ggplot(StationData, aes(as.factor(Interval))) + 
+  geom_bar(fill='lightgrey', 
+           color='black') + 
+  theme_classic()
+
 ```
+La maggior parte dei dati è alla mezz'ora, ma c'è un gruppo consistente anche a 5 minuti.
 
-Quando troviamo dati con risoluzione al minuto?
 
-```{r}
-# istogramma con le funzioni ggplot della suite tidyverse
+2. Quando troviamo dati con risoluzione al minuto?
+
+```{r warning=FALSE}
+# istogramma con le funzioni base di R
+hist(StationData$DateTime[StationData$Interval==1], 
+     breaks = 30,
+     xlab = "DateTime",    # x-axis label
+     freq = T,             # switch to counts
+     density = 40)         # grey-like fill (graphical parameter)
+
+# istogramma con le funzioni ggplot di tidyverse
 StationData %>% 
   filter(
     Interval == 1
@@ -190,18 +283,33 @@ StationData %>%
 
 ```
 
-La funzione `geom_histogram()` crea un istogramma della variabile specificata in `aes()`. Il parametro aggiuntivo fill dentro `aes()` permettere di suddividere le colonne dell'istogramma per stagione, andando a differenziare il colore di riempimento ("fill" appunto).
+Le misure al minuto finiscono nel 2011.
+
+
+La funzione `geom_histogram()` crea un istogramma della variabile specificata in `aes()`. Il parametro aggiuntivo fill dentro `aes()` permettere di suddividere le colonne dell'istogramma per stagione, andando a differenziare il colore di riempimento ("fill" appunto). I colori possono essere specificati con la famiglia di funzioni `scale_`. In questo caso per inserire i colori del riempimento manualmente uso `scale_fill_manual`.
+
+3. Come sono distribuiti i dati alla mezz'ora rispetto ad anno e stagione?
+
 ```{r}
 StationData %>%
+  filter(
+    Interval == 30
+  ) %>%
   ggplot(aes(year(DateTime), fill = Season)) + 
   geom_histogram(binwidth = 1) +
+  # more colors at https://r-charts.com/colors/
   scale_fill_manual(values = c("DJF" = "dodgerblue1",
                                "MAM" = "springgreen3",
                                "JJA" = "goldenrod1",
                                "SON" = "indianred1")) +
-  # more colors at https://r-charts.com/colors/ 
   theme_bw()
 ```
+
+Si noti un funzionamento discontinuo negli anni dal 2011 al 2013, mentre dal 2008 al 2010 e soprattutto dal 2014 al 2016 i dati sono uniformemente distribuiti tra le annate e le stagioni, per poi peggiorare leggermente negli anni più recenti.
+
+------------------------------------------------------------------------
+
+### Scatterplots
 
 La funzione `geom_count()` è utile per scatterplots e simili, dove c'è rischio concreto di overplotting.
 
@@ -209,6 +317,7 @@ La funzione `geom_count()` è utile per scatterplots e simili, dove c'è rischio
 # Un esempio di grafico con la suite ggplot2 preceduta da un filtro
 StationData %>%
   filter(
+    Interval == 30,
     Press > 800,
     outTemp > -30,
     outHum > 0,
@@ -234,6 +343,7 @@ Lo stesso grafico, usando però `geom_point()` che è affetto da overplotting. N
 ```{r}
 StationData %>%
   filter(
+    Interval == 30,
     Press > 800,
     outTemp > -30,
     outHum > 0,
@@ -259,6 +369,7 @@ Scatterplot che mette tre variabili a confronto...
 ```{r}
 StationData %>% 
   filter(
+    Interval == 30,
     wndSpeed >= 0, 
     outHum >=0, 
     outTemp > -50,
@@ -278,38 +389,17 @@ StationData %>%
 
 ```
 
-### 
 
 ------------------------------------------------------------------------
 
-### Filtri
+## Lavoro sui dati di VENTO
 
-Tramite la funzione `filter()` del pacchetto `dplyr` (sempre di tidyverse) posso creare filtri ponendo condizioni direttamente sulle colonne del dataset originale.
+------------------------------------------------------------------------
 
-Tramite la funzione `minute()` del pacchetto `lubridate()` seleziono solo le righe prese allo scadere dell'ora.
+Imposto gli estremi dell'intervallo temporale di interesse tramite la funzione `as.POSIXct`, specificando il formato in cui fornisco la stringa e il fuso orario (IMPORTANTE! di default verrebbe registrato come CET, ma meglio lavorare in UTC).
 
-Salvo un sottoinsieme del dataset in una nuova variabile, raccogliendo solo i dati orari. Attenzione perché la variabile "Interval" rimane impostata sulla risoluzione temporale originaria. Voglio solo misure orarie provenienti dalle letture ogni 30 minuti quindi richiedo anche che Interval == 30.
+Ho scelto gli anni 2014, 2015 e 2016 perché nell'istogramma esplorativo della distribuzione dei dati sono tre anni con un alto numero di dati, distribuito uniformemente tra le annate e tra le stagioni. Nel caso di un'analisi stagionale questo mi garantisce la necessaria omogeneità del dataset, mentre tre anni consecutivi permettono già di filtrare un po' di segnale casuale della singola annata.
 
-```{r}
-HourlyData <- StationData %>%
-  filter(
-    minute(DateTime) == 0,
-    Interval == 30
-  )
-
-print(HourlyData)
-```
-
-Per salvare il dataset di tutte le righe escluse posso usare nuovamente filter stando attento di impostare i filtri in modo complementare, oppure posso usare la funzione `setdiff()` di `dplyr`. Dichiaro l'appartenenza al pacchetto in modo esplicito per essere sicuro che non ci siano ambiguità nel caso di più funzioni con lo stesso nome.
-
-```{r}
-excludedData <- dplyr::setdiff(StationData, HourlyData)
-print(excludedData)
-```
-
-
-
-Imposto gli estremi dell'intervallo temporale di interesse tramite la funzione `as.POSIXct`, specificando il formato in cui fornisco la stringa e il fuso orario (IMPORTANTE! di default verrebbe registrato come CET, meglio lavorare in UTC imho).
 ```{r}
 # Uso le funzioni base:
 startTime <- as.POSIXct("201401010030", format = "%Y%m%d%H%M", tz = "UTC")
@@ -320,8 +410,6 @@ ymd_hm("201401010030")
 ymd_hm("201701010000")
 
 ```
-
-
 
 Filtro i valori non verosimili della velocità del vento per l'intervallo prescelto.
 
@@ -339,16 +427,17 @@ windData <- StationData %>%
     wndDir >= 0,
     wndDir <= 360
     
-    # ovviamente in questo comando posso inserire anche una selezione dell'intervallo temporale, andando ad impostare un minimo ed un massimo per DateTime
-    
   )%>%
   select(DateTime, wndDir, wndSpeed, Season)
 
-print(windData)
+windData %>% head(20)
 ```
 
+Elimino gli istanti in cui il vento non è nullo e non cambia per tre ore consecutive (indice di probabile malfunzionamento dello strumento). Per farlo evito di usare `if` e `for` concatenati. Piuttosto creo dei flag di supporto tramite funzioni ottimizzate a finestra mobile (dal pacchetto `zoo`).
 
-Elimino gli istanti in cui il vento non è nullo e non cambia per tre ore consecutive (indice di probabile malfunzionamento dello strumento). Per farlo evito di usare `if` e `for` concatenati. Piuttosto creo dei flag di supporto tramite funzioni ottimizzate a finestra mobile (dal pacchetto  `zoo`).
+Flag sx e dx, poi passati in OR
+
+Da progettare per wndDir tenendo conto della chiusura degli angoli giri
 
 ```{r}
 # flag di continuità per 3 ore consecutive: (align = "left")
@@ -383,13 +472,17 @@ windData_excl <- windData %>% filter(
   wndSpeed > 0,
   constFlag == T,
   whole3hours == T
-) %>% print()
+)
 
-windData_filtered <- setdiff(windData, windData_excl)
-print(windData_filtered)
-
+head(windData_excl, 20)
 ```
 
+Creo il dataset filtrato per esclusione:
+```{r}
+windData_filtered <- setdiff(windData, windData_excl)
+
+head(windData_filtered, 20)
+```
 
 Salvo i dataset per poterli recuperare successivamente:
 
@@ -397,11 +490,11 @@ Salvo i dataset per poterli recuperare successivamente:
 
 save(windData_filtered, windData_excl, file = paste0(resfolder, "windData.RData"))
 ```
+
 Il file `.RData` pesa molto meno dei files txt o csv e viene letto e scritto più rapidamente.
 
+Visualizzo un istogramma delle velocità filtrate:
 
-
-Visualizzo un istogramma delle velocità:
 ```{r}
 windData_filtered %>%
   ggplot(aes(wndSpeed)) + 
@@ -414,72 +507,76 @@ windData_filtered %>%
 
 ```
 
-
-
 Visualizzo un istogramma della "consistency":
+
+Utilizzo la funzione seq() per creare una sequenza di tutti gli intervalli temporali compresi tra `startTime` e `endTime`
 
 ```{r}
 totalTime <- seq(startTime, endTime, by="30 min")
+```
 
-monthsTotIntervals <- hist(month(totalTime), plot = F, breaks = 0.5:12.5)
-monthsPopulated    <- hist(month(windData_filtered$DateTime), plot = F, breaks = 0.5:12.5)
+Posso usare la funzione `hist()` anche per ricavare bining di variabili continue, impostando `plot = F` e assegnando il risultato ad una variabile.
+```{r}
+monthsTotIntervals <- hist(month(totalTime), 
+                           plot = F, 
+                           breaks = 0.5:12.5)
 
-plot(monthsPopulated$mids, 100*monthsPopulated$counts/monthsTotIntervals$counts, type="h",
-     xlim = c(0,12),
-     ylim = c(0,100),
-     # lwd = 10,
-     xlab = "Month",
-     ylab = "Valid data (%)")
+monthsPopulated    <- hist(month(windData_filtered$DateTime), 
+                           plot = F, 
+                           breaks = 0.5:12.5)
+```
 
 
-df <- tibble(Months = monthsPopulated$mids, 
-             `Valid data (%)` = 100*monthsPopulated$counts/monthsTotIntervals$counts)
-
-df %>%
+```{r}
+tibble(Months = as.factor(monthsPopulated$mids), 
+             `Valid data (%)` = 100*monthsPopulated$counts/monthsTotIntervals$counts) %>%
   ggplot(aes(Months, `Valid data (%)` )) + 
   geom_col(fill='lightgrey', 
            color='black') +
+  coord_cartesian(ylim = c(75,100)) + # zoom at high percentages
   theme_bw() 
 
 ```
 
+TODO SALVARE LE FIGURE! ggsave
 
 
 
 
-Esporto i dati nel formato "LAKES":
+TODO medie orarie o giornaliere con groupby e summarize
+
+
+
+
+Converto i dati nel formato richiesto dal software per la visualizzazione interattiva delle rose dei venti:
 ```{r}
-# EXPORT TO LAKE FORMAT ======================================
-
-toLAKES <- cbind(matrix(
-  rep(99999,dim(windData_filtered)[1]),dim(windData_filtered)[1],1), # Station ID (flag)
+toLAKES <- tibble(
+  StID = rep(99999,dim(windData_filtered)[1]),               # Station ID (flag)
   
-  year(windData_filtered$DateTime),                                  # Date (year, month, day, hour)
-  month(windData_filtered$DateTime),
-  day(windData_filtered$DateTime),
-  hour(windData_filtered$DateTime),
+  YYYY = year(windData_filtered$DateTime),                   # year
+  MM   = month(windData_filtered$DateTime),                  # month
+  DD   = day(windData_filtered$DateTime),                    # day
+  HH   = hour(windData_filtered$DateTime),                   # hour
   
-  round(windData_filtered$wndDir,digits=0),                          # Rounded Wind Direction (?)
-  round(1.94384*windData_filtered$wndSpeed,digits=0)                 # Rounded Wind Speed (knot = 1.94384 x m/s)
+  Dir  = round(windData_filtered$wndDir,digits=0),           # Rounded Wind Direction
+  WS   = round(1.94384*windData_filtered$wndSpeed,digits=0)  # Rounded Wind Speed 
+                                                             # (1 knot = 1.94384 m/s)
 )
-colnames(toLAKES) <- c("StID","YYYY","MM","DD","HH","Dir","WS")
-rownames(toLAKES) <- c(1:dim(windData_filtered)[1])
 
-windData_filtered[1:6,]
-toLAKES[1:6,]
-
-
-
-#this section added to append the "LAKES FORMAT" string at the beginning of the file
-fileConn<-file(paste0(resfolder, StationDataRootName,"_LAKES.txt"))
-writeLines(c("LAKES FORMAT"), fileConn)
-close(fileConn)
-
-write.table(toLAKES, paste0(resfolder, StationDataRootName,"_LAKES.txt"),
-            sep = " ", row.names=FALSE, col.names=FALSE, append =TRUE)
-
+head(as.matrix(toLAKES))
 ```
 
 
 
+Preparo il file di output e scrivo i dati:
+```{r}
+# Append the "LAKES FORMAT" string at the beginning of the file
+fileConn<-file(paste0(resfolder, StationDataRootName,"_LAKES.txt"))
+writeLines(c("LAKES FORMAT"), fileConn)
+close(fileConn)
 
+# Export to a LAKES-formatted file
+write.table(toLAKES, paste0(resfolder, StationDataRootName,"_LAKES.txt"),
+            sep = " ", row.names=FALSE, col.names=FALSE, append =TRUE)
+
+```
