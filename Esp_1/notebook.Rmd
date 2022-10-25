@@ -19,8 +19,12 @@ rm(list=ls())
 ```{r}
 # Load packages
 require(tidyverse)
-require(lubridate)
 require(zoo)
+
+# To see what packages are part of tidyverse:
+tidyverse_logo()
+tidyverse_packages()
+
 ```
 
 ```{r}
@@ -218,9 +222,9 @@ StationData %>%
   coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
   
   scale_color_manual(values = c("DJF" = "dodgerblue1",
-                               "MAM" = "springgreen3",
-                               "JJA" = "goldenrod1",
-                               "SON" = "indianred1")) +
+                                "MAM" = "springgreen3",
+                                "JJA" = "goldenrod1",
+                                "SON" = "indianred1")) +
   theme_bw()
 
 ```
@@ -241,9 +245,9 @@ StationData %>%
   facet_wrap(~Season) +               # divido in quattro box
   
   scale_color_manual(values = c("DJF" = "dodgerblue1",
-                               "MAM" = "springgreen3",
-                               "JJA" = "goldenrod1",
-                               "SON" = "indianred1")) +
+                                "MAM" = "springgreen3",
+                                "JJA" = "goldenrod1",
+                                "SON" = "indianred1")) +
   
   coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
   theme_bw()
@@ -304,11 +308,29 @@ print(excludedData)
 ```
 
 
-Filtro i valori non verosimili della velocità del vento.
+
+Imposto gli estremi dell'intervallo temporale di interesse tramite la funzione `as.POSIXct`, specificando il formato in cui fornisco la stringa e il fuso orario (IMPORTANTE! di default verrebbe registrato come CET, meglio lavorare in UTC imho).
+```{r}
+# Uso le funzioni base:
+startTime <- as.POSIXct("201401010030", format = "%Y%m%d%H%M", tz = "UTC")
+endTime   <- as.POSIXct("201701010000", format = "%Y%m%d%H%M", tz = "UTC")
+
+# oppure quelle offerte dal pacchetto lubridate di tidyverse:
+ymd_hm("201401010030")
+ymd_hm("201701010000")
+
+```
+
+
+
+Filtro i valori non verosimili della velocità del vento per l'intervallo prescelto.
 
 ```{r}
 windData <- StationData %>%
   filter(
+    DateTime >= startTime,
+    DateTime <  endTime,
+    
     Interval == 30, # seleziono solo misure a 30 minuti
     
     wndSpeed >= 0,
@@ -326,7 +348,8 @@ print(windData)
 ```
 
 
-Elimino gli istanti in cui il vento non è nullo ma non cambia per tre ore consecutive (indice di malfunzionamento).
+Elimino gli istanti in cui il vento non è nullo e non cambia per tre ore consecutive (indice di probabile malfunzionamento dello strumento). Per farlo evito di usare `if` e `for` concatenati. Piuttosto creo dei flag di supporto tramite funzioni ottimizzate a finestra mobile (dal pacchetto  `zoo`).
+
 ```{r}
 # flag di continuità per 3 ore consecutive: (align = "left")
 Diff3hL <- c(as.double(diff(windData$DateTime,lag = 5)), rep(NA, 5))
@@ -340,17 +363,17 @@ windData$whole3hours <- Diff3hL == 2.5 | Diff3hR == 2.5
 
 # flag di costanza della velocità in 3 ore (align = "left")
 DiffWsL <- rollapply(windData$wndSpeed,
-                    width = 6, by=1,
-                    FUN = sd,
-                    align = "left",
-                    fill  = NA)
+                     width = 6, by=1,
+                     FUN = sd,
+                     align = "left",
+                     fill  = NA)
 
 # flag di costanza della velocità in 3 ore (align = "right")
 DiffWsR <- rollapply(windData$wndSpeed,
-                    width = 6, by=1,
-                    FUN = sd,
-                    align = "right",
-                    fill  = NA)
+                     width = 6, by=1,
+                     FUN = sd,
+                     align = "right",
+                     fill  = NA)
 
 
 windData$constFlag <- DiffWsL == 0 | DiffWsR == 0 
@@ -372,8 +395,9 @@ Salvo i dataset per poterli recuperare successivamente:
 
 ```{r}
 
-
+save(windData_filtered, windData_excl, file = paste0(resfolder, "windData.RData"))
 ```
+Il file `.RData` pesa molto meno dei files txt o csv e viene letto e scritto più rapidamente.
 
 
 
@@ -391,6 +415,70 @@ windData_filtered %>%
 ```
 
 
+
+Visualizzo un istogramma della "consistency":
+
+```{r}
+totalTime <- seq(startTime, endTime, by="30 min")
+
+monthsTotIntervals <- hist(month(totalTime), plot = F, breaks = 0.5:12.5)
+monthsPopulated    <- hist(month(windData_filtered$DateTime), plot = F, breaks = 0.5:12.5)
+
+plot(monthsPopulated$mids, 100*monthsPopulated$counts/monthsTotIntervals$counts, type="h",
+     xlim = c(0,12),
+     ylim = c(0,100),
+     # lwd = 10,
+     xlab = "Month",
+     ylab = "Valid data (%)")
+
+
+df <- tibble(Months = monthsPopulated$mids, 
+             `Valid data (%)` = 100*monthsPopulated$counts/monthsTotIntervals$counts)
+
+df %>%
+  ggplot(aes(Months, `Valid data (%)` )) + 
+  geom_col(fill='lightgrey', 
+           color='black') +
+  theme_bw() 
+
+```
+
+
+
+
+
+Esporto i dati nel formato "LAKES":
+```{r}
+# EXPORT TO LAKE FORMAT ======================================
+
+toLAKES <- cbind(matrix(
+  rep(99999,dim(windData_filtered)[1]),dim(windData_filtered)[1],1), # Station ID (flag)
+  
+  year(windData_filtered$DateTime),                                  # Date (year, month, day, hour)
+  month(windData_filtered$DateTime),
+  day(windData_filtered$DateTime),
+  hour(windData_filtered$DateTime),
+  
+  round(windData_filtered$wndDir,digits=0),                          # Rounded Wind Direction (?)
+  round(1.94384*windData_filtered$wndSpeed,digits=0)                 # Rounded Wind Speed (knot = 1.94384 x m/s)
+)
+colnames(toLAKES) <- c("StID","YYYY","MM","DD","HH","Dir","WS")
+rownames(toLAKES) <- c(1:dim(windData_filtered)[1])
+
+windData_filtered[1:6,]
+toLAKES[1:6,]
+
+
+
+#this section added to append the "LAKES FORMAT" string at the beginning of the file
+fileConn<-file(paste0(StationDataRootName,"_LAKES.txt"))
+writeLines(c("LAKES FORMAT"), fileConn)
+close(fileConn)
+
+write.table(toLAKES, paste0(StationDataRootName,"_LAKES.txt"),
+            sep = " ", row.names=FALSE, col.names=FALSE, append =TRUE)
+
+```
 
 
 
