@@ -25,6 +25,7 @@ rm(list=ls())
 ```{r}
 # Load packages
 require(tidyverse)  # For most of the things shown here
+require(lubridate)  # For date-time manipulations
 require(zoo)        # For rolling functions (moving window)
 
 tidyverse_logo()
@@ -35,6 +36,7 @@ tidyverse_packages()
 
 ```{r}
 # Define the working directory (in this case, the path is different depending on whether the code is executed on Linux or Windows, but just for my convenience)
+
 if(Sys.info()["sysname"]=="Linux"){
   setwd("/home/giacom0rovers1/tutorLabFisAtm22/Esp_1/")
 }else{
@@ -70,6 +72,7 @@ filenames <- list(
   # output.ExcWSneg = paste0(resfolder , StationDataRootName, "_ExcWSneg.txt"),
   # ouput.ExcWS3h   = paste0(resfolder , StationDataRootName, "_ExcWS3h.txt"),
   output.LAKES    = paste0(resfolder , StationDataRootName, "_LAKES.txt"),
+  output.windData = paste0(resfolder, StationDataRootName, "_windData.RData"),
   
   figure.DataConsistency = paste0(figfolder, StationDataRootName, "_DataConsistency.png"),
   figure.HistWS          = paste0(figfolder, StationDataRootName, "_HistWS.png"),
@@ -330,6 +333,8 @@ StationData %>%
   theme_bw()
 ```
 Il parametro aggiuntivo `fill` dentro `aes()` permettere di suddividere le colonne dell'istogramma per stagione, andando a differenziare il colore di riempimento ("fill" appunto). I colori possono essere specificati con la famiglia di funzioni `scale_`. In questo caso per inserire i colori del riempimento manualmente uso `scale_fill_manual`.
+La legenda appare in automatico, utilizzando i nomi delle variabili in uso.
+
 
 *Si noti un funzionamento discontinuo negli anni dal 2011 al 2013, mentre dal 2008 al 2010 e soprattutto dal 2014 al 2016 i dati sono uniformemente distribuiti tra le annate e le stagioni, per poi peggiorare leggermente negli anni più recenti.*
 
@@ -363,7 +368,7 @@ StationData %>%
 
 ```
 
-Lo stesso grafico, usando però `geom_point()` che è affetto da overplotting. Non si capisce quali punti siano più popolati e il rendering della figura è molto rallentato (vengono disegnati inutilmente tantissimi punti).
+Di seguito lo stesso grafico, ottenuto però con la funzione `geom_point()` che è affetta da overplotting. In questo caso non si capisce quali punti siano più popolati di altri. Inoltre, il rendering della figura è molto rallentato, perché vengono disegnati inutilmente tantissimi punti.
 
 ```{r}
 StationData %>%
@@ -408,6 +413,7 @@ StationData %>%
 
 ```
 
+------------------------------------------------------------------------
 
 ------------------------------------------------------------------------
 
@@ -581,6 +587,11 @@ Posso usare la funzione `hist()` anche per ricavare binning di variabili continu
 monTot <- hist(month(totalTime), 
                plot = F, 
                breaks = 0.5:12.5)
+monTot
+```
+
+
+```{r}
 plot(monTot)
 ```
 
@@ -615,6 +626,7 @@ fig2
 ```
 
 -------------------------------------------------------------------------
+
 ### Manipolazione dei dati
 
 Con le funzioni `group_by()` e `summarise()` di `dplyr` posso fare in pochi istanti operazione e statistiche su variabili aggregate. Calcolo qui ad esempio le velocità medie giornaliere, raggruppando secondo `date(DateTime)`. Questo comando permette di identificare univocamente ogni giornata ed aggregare le ore all'interno di essa.
@@ -710,23 +722,124 @@ windData_filtered %>%
 
 ```
 
+------------------------------------------------------------------------
+
+### Statistiche
+
+Nel confrontare più stazioni è possibile sfruttare le funzioni statistiche di R. Correlazione e covarianza sono ovviamente già implementate nel linguaggio, così come molti modelli di fit, lineari e non.
+
+Creo un dataset fittizio per lanciare le funzioni di esempio.
+```{r}
+windD <- windData_filtered %>%
+  mutate(wndSpeed2 = wndSpeed *                          # Add random noise
+           rnorm(n = length(windData_filtered$DateTime), # (multiplicative)
+                 mean = 1, 
+                 sd = 0.2) + 
+           rnorm(n = length(windData_filtered$DateTime), # (additive)
+                 mean = 0, 
+                 sd = 0.3)
+  ) %>%
+  mutate(
+    wndSpeed2 = 0.447 * (wndSpeed2 %/% 0.447)            # Original resolution
+  ) %>%
+  filter(
+    wndSpeed > 0,                                        # Only non-zero entries 
+    wndSpeed2 >= 0
+  )
+
+```
+
+
+Calcolo correlazione e altre statistiche continue tramite una funzione che definisco una volta per tutte.
+
+```{r}
+statsFun <- function(Var, Ref){
+  avgR  = mean(Ref)
+  SMP   = length(na.omit(Var))
+  COR   = cor(Var, Ref, use = "pairwise.complete.obs")
+  ME    = mean(Var - Ref, na.rm = T)
+  MAE   = mean(abs(Var - Ref), na.rm = T)
+  RMSE  = sqrt(mean((Var - Ref)^2, na.rm = T))
+  MAX   = max(Var, na.rm = T)
+  nME   = ME/avgR
+  nMAE  = MAE/avgR
+  CV    = RMSE/avgR
+  
+  table <- data.frame(SMP, avgR, nME, nMAE, CV, COR, ME, MAE, RMSE, MAX)
+  
+  return(signif(table, 3))
+}
+
+
+results <- statsFun(windD$wndSpeed2, windD$wndSpeed)
+results
+```
+
+
+```{r}
+# Pearson's Correlation Coefficient (CC or R)
+results$COR
+
+# Coefficient of Variation (CV)
+results$CV
+
+# normalized Mean Error (or Bias)
+results$nME
+
+```
+
+Calcolo il modello lineare per il fit dei dati sullo scatterplot. Gli oggetti `lm` sono ricchi di informazioni statistiche sulla significatività del modello.
+
+```{r}
+fitLM <- lm(formula = wndSpeed2~wndSpeed, data = windD)
+summary(fitLM)
+```
+
+Ricavo l'equazione dai coefficienti:
+```{r}
+textLM <- paste0("y = ",round(fitLM$coefficients[1],digits=2),
+                 " + ",round(fitLM$coefficients[2],digits=2)," x")
+textLM
+```
+
+Creo lo scatterplot di confronto tra stazioni. Posso disegnare il fit sia con la funzione `geom_smooth(method = "lm")` di ggplot, sia tracciando una retta con `geom_abline()` e impostando `slope` e `intercept` secondo i coefficienti di `lm()`. L'unica differenza è che la prima disegna il fit solo all'interno dell'intervallo dei dati (linea rossa piena), mentre la seconda si estende anche oltre (linea rossa tratteggiata).
+
+```{r}
+windD %>%
+  ggplot(aes(wndSpeed, wndSpeed2)) +
+  geom_count() + 
+  scale_size_area() +
+  geom_smooth(method = 'lm', se = T, colour = 'red', size=0.6) +
+  geom_abline(slope = fitLM$coefficients[2], 
+              intercept = fitLM$coefficients[1], linetype = 2, colour = 'red') + 
+  ggtitle("Wind speed (m/s)") +
+  xlab('davis01') +
+  ylab('davis01_FAKE') +
+  geom_abline(slope = 1, intercept = 0, alpha = 0.2) + 
+  coord_fixed(xlim = c(0,8),
+              ylim = c(0,8)) +
+  theme_bw()
+
+```
+
+
 
 ------------------------------------------------------------------------
 
 ### Outputs
 
-#### RData
+#### RData archive (formato standard di R)
 
 Salvo i dataset (escluso e filtrato) per poterli recuperare successivamente. Posso salvare più variabili nello stesso archivio compresso tramite la funzione `save()`.
 
 ```{r}
-save(windData_filtered, windData_excl, file = paste0(resfolder, "windData.RData"))
+save(windData_filtered, windData_excl, file = filenames$output.windData)
 ```
 
 Il file `.RData` pesa molto meno dei files txt o csv e viene letto e scritto più rapidamente.
 
 
-#### PNG
+#### Immagini PNG
 
 Salvo le figure in formato PNG tramite la funzione `ggsave()`, richiamando le variabili dei plot salvate precedentemente. Alternativamente potrei chiamare ggsave() appena dopo ogni plot, senza specificare il parametro `plot` che di default ha il valore `last_plot()`, cioè salva l'ultima figura creata da `ggplot()`.
 
@@ -740,7 +853,7 @@ ggsave(filenames$figure.DailyWind, plot = fig3)
 ```
 
 
-#### ASCII txt (per WRPLOT)
+#### File testuale TXT (per WRPLOT)
 
 Converto i dati nel formato richiesto dal software per la visualizzazione interattiva delle rose dei venti:
 ```{r}
@@ -775,15 +888,5 @@ write.table(toLAKES, paste0(resfolder, StationDataRootName,"_LAKES.txt"),
 ```
 
 
-
-### Statistiche (portare su dopo visualizzazione)
-
-TODO
-Statistiche, fit lineari e scatterplot quadrati con bisettrice e fit
-
-coord_cartesian(xlim = c(0,100)) + 
-coord_fixed(
-xlim=c(0,20),
-ylim=c(0,20)
-) +
+Fine. Buon lavoro!
 

@@ -46,3 +46,5 @@ vignettes/*.pdf
 # Pictures
 *.png
 
+# Data Archives
+*.RData
