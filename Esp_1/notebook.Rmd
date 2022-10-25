@@ -471,11 +471,11 @@ toLAKES[1:6,]
 
 
 #this section added to append the "LAKES FORMAT" string at the beginning of the file
-fileConn<-file(paste0(StationDataRootName,"_LAKES.txt"))
+fileConn<-file(paste0(resfolder, StationDataRootName,"_LAKES.txt"))
 writeLines(c("LAKES FORMAT"), fileConn)
 close(fileConn)
 
-write.table(toLAKES, paste0(StationDataRootName,"_LAKES.txt"),
+write.table(toLAKES, paste0(resfolder, StationDataRootName,"_LAKES.txt"),
             sep = " ", row.names=FALSE, col.names=FALSE, append =TRUE)
 
 ```
