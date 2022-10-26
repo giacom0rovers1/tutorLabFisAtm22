@@ -450,7 +450,7 @@ Ho scelto gli anni 2014, 2015 e 2016 perché nell'istogramma esplorativo della d
 Filtro i valori non verosimili della velocità del vento per l'intervallo prescelto.
 
 ```{r}
-windData <- StationData %>%
+StationData %>%
   filter(
     DateTime >= startTime,
     DateTime <  endTime,
@@ -464,11 +464,43 @@ windData <- StationData %>%
     wndDir < 360
     
   )%>%
-  select(DateTime, wndDir, wndSpeed, Season)
+  select(DateTime, wndDir, wndSpeed, Season) %>% 
+  head()
 
-windData %>% head(20)
 ```
 
+
+La potenza di `filter()` è gestire tanti filtri contemporaneamente e permettere aggiustamenti in tempo reale. Se voglio però analizzare in seguito la statistica dei dati filtrati di volta in volta, è meglio spezzare il procedimento in più steps.
+
+```{r}
+data0 <- StationData %>%
+  filter(
+    DateTime >= startTime,
+    DateTime <  endTime
+  ) 
+
+data1 <- data0 %>% 
+  filter(
+    Interval == 30 # seleziono solo misure a 30 minuti
+  )
+
+data2 <- data1 %>% 
+  filter(
+    wndSpeed >= 0,
+    wndSpeed <= 25,
+  )
+
+data3 <- data2 %>%
+  filter(
+    wndDir >= 0,
+    wndDir < 360
+  )
+
+windData <- data3 %>% select(DateTime, wndDir, wndSpeed, Season)
+
+head(windData)
+
+```
 
 ---------------------------------------------------------------------------
 
@@ -570,16 +602,38 @@ fig1 + facet_wrap(~Season)
 ```
 
 
-#### Consistency plot
-
-Visualizzo un istogramma della "consistency", intesa come percentuali di istanti di funzionamento della strumentazione (dati validi) rispetto al totale degli istanti disponibili.
-
+#### Consistency
 
 Utilizzo la funzione seq() per creare una sequenza di tutti gli intervalli temporali compresi tra `startTime` e `endTime`. R gestisce automaticamente il calendario (lunghezza dei vari mesi, anni bisestili, ecc..).
 
 ```{r}
 totalTime <- seq(startTime, endTime, by="30 min")
 ```
+
+
+Calcolo quanti dati sono presenti ad ogni step di filtraggio.
+```{r}
+consTab <- data.frame(
+  Total     = length(totalTime),
+  Available = dim(data0)[1],
+  halfHour  = dim(data1)[1],
+  wsOK      = dim(data2)[1],
+  wdOK      = dim(windData)[1],
+  sd3hOK    = dim(windData_filtered)[1]
+)
+
+consTab
+```
+
+Calcolo le percentuali di dati rimasti dopo ogni step successivo di filtraggio (sempre rispetto al totale iniziale). Potrei facilmente calcolare anche le percentuali relative ad ogni step precedente.
+```{r}
+percTab <- round(consTab/consTab$Total*100, 2)
+percTab
+```
+
+*Il grosso dei dati filtrati viene escluso dal filtro sulla persistenza.*
+
+Analizziamo ora l'andamento **mensile** delle percentuali di istanti di funzionamento della strumentazione (dati validi) rispetto al totale degli istanti disponibili.
 
 Posso usare la funzione `hist()` anche per ricavare binning di variabili continue, impostando `plot = F` e assegnando il risultato ad una nuova variabile. Per fare la stessa cosa con le funzioni di tidyverse invece dovrei cambiare la chiamata da `geom_histogram()` a `stat_bin()` (vedi `?geom_freqpoly`).
 
