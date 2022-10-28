@@ -12,4 +12,39 @@ Laboratorio di Fisica dell'Atmosfera A.A. 2022/23
 ------------------------------------------------------------------------
 
 
+Spunti:
+
+- Val la pena usare raster package?
+
+- Nella configurazione attuale è possibile confrontare punto per punto i prodotti?
+  '-> mancano tutte le funzioni per il calcolo degli scores...
+
+
+ToDo:
+
+- (check slides del corso e consegne dell'esperienza)
+
+- Salvare non solo le mappe GPM alla fine ma tutti i plot intermedi (oppure lanciarli qui nel notebook)
+
+
+
+Note:
+
+- Funziona tutto ma il prodotto interpolato dei pluviometri è LENTISSIMO.
+
+
+
+```{r}
+# t <- "201610012100"
+
+colnames(MyGridSAT)[84]
+colnames(MyGridPLV)[22]
+colnames(MyGridGPM)[43]
+colnames(MyGridERA5)[22]
+
+
+plot(MyGridGPM[,43], MyGridERA5[,22])
+plot(MyGridGPM[,43], MyGridPLV[,22], ylim=c(0,20)) # watch out for OUTLIERS!!!
+
+```
 
