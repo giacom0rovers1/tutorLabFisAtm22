@@ -14,11 +14,12 @@ library(rgdal)      # Allows call a command directly with no need to indicate a 
 library(gdalUtilities)  # (library::command, only commands out of the R base)
 
 # Set Working Directory --------------------------------------------------------
-# setwd("C:/Users/qucci/Desktop/RTD_2017/Corso Lab/Corso 2021_22")
+rootFolder <- "~/Insync/giacomo.roversi2@studio.unibo.it/OneDrive Biz - Shared/Laboratorio di Fisica dell'Atmosfera"
+setwd(rootFolder)
 
 # Background Maps --------------------------------------------------------------
-ContoursGLOBAL <- dir("C:/Users/qucci/Desktop/RTD_2017/Corso Lab/Corso 2021_22/Contours Global")
-ContoursIT     <- dir("C:/Users/qucci/Desktop/RTD_2017/Corso Lab/Corso 2021_22/Contours IT")
+ContoursGLOBAL <- dir("./Contours Global")
+ContoursIT     <- dir("./Contours IT")
 
 GlobalBG <- function(ColFILL,ColEDGE)
               for (i in 1:length(ContoursGLOBAL)) {
@@ -53,7 +54,7 @@ fSAT <- dir("SAT", pattern=".grb")
 fSAT <- fSAT[substr(fSAT,9,12)=="1001"]
 length(fSAT)
 
-# Import data (Precipitation Rate [kg/m?s]) ------------------------------------
+# Import data (Precipitation Rate [kg/m2 h] --> mm/h) ------------------------------------
 pSAT <- list()
 for(i in 1:length(fSAT)) 
   pSAT[[i]] <- readGDAL(paste0("SAT/",fSAT[i]), silent = TRUE)
@@ -243,7 +244,7 @@ PlotGPM(45,0,30,30,60,GlobalBG)
 # D) PRECIPITATION FROM ERA5 DATA ==============================================
 
 # Search GRIB files ------------------------------------------------------------
-fERA5 <- dir(path = "C:/Users/qucci/Desktop/RTD_2017/Corso Lab/Corso 2021_22", pattern=".grib")
+fERA5 <- dir(path = rootFolder, pattern=".grib")
 length(fERA5)
 
 # Import data ------------------------------------------------------------------
@@ -533,23 +534,24 @@ PlotERA5(22,9.6,10.2,43.9,44.35,ItalyBG)
 
 # EXPORT PROCESSED DATA ========================================================
 
+resfolder <- "~/tutorLabFisAtm22/Esp_3/risultati/"
 
 write.table(cbind(MyGrid,MyGridSAT),
-            "MyGridSAT_LaSpezia.txt",
+            paste0(resfolder, "MyGridSAT_LaSpezia.txt"),
             sep = "\t", row.names=FALSE, col.names=TRUE)
 write.table(cbind(MyGrid,MyGridPLV),
-            "MyGridPLV_LaSpezia.txt",
+            paste0(resfolder, "MyGridPLV_LaSpezia.txt"),
             sep = "\t", row.names=FALSE, col.names=TRUE)
 write.table(cbind(MyGrid,MyGridGPM),
-            "MyGridGPM_LaSpezia.txt",
+            paste0(resfolder, "MyGridGPM_LaSpezia.txt"),
             sep = "\t", row.names=FALSE, col.names=TRUE)
 write.table(cbind(MyGrid,MyGridERA5),
-            "MyGridERA5_LaSpezia.txt",
+            paste0(resfolder, "MyGridERA5_LaSpezia.txt"),
             sep = "\t", row.names=FALSE, col.names=TRUE)
 
 
 # Save plot as PNG for GPM time serie (also accepts PDF, JPG, etc...) ----------
-outDIR <- paste0("GPM_",tGPM[1],"_",tGPM[length(tGPM)])
+outDIR <- paste0(resfolder, "GPM_",tGPM[1],"_",tGPM[length(tGPM)])
 dir.create(outDIR)
 for(i in 1:length(tGPM)) {
   png(file=paste0(outDIR,"/GPM_",tGPM[i],".png"))

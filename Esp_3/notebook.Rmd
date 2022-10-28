@@ -1,0 +1,15 @@
+---
+title: "Precipitation processing with tidyverse - R Notebook"
+output: html_notebook
+---
+
+**Autore**: Giacomo Roversi
+
+Laboratorio di Fisica dell'Atmosfera A.A. 2022/23
+
+# Esperienza 3
+
+------------------------------------------------------------------------
+
+
+
