@@ -158,6 +158,10 @@ dim(StationData)
 Aggiungo alcune colonne di supporto, che risulteranno molto utili nell'analisi dei dati. Non deve preoccuparci la ridondanza: la memoria viene gestita da R in modo efficiente. Unisco data e ora nella colonna "DateTime".
 ```{r}
 StationData$DateTime <- StationData$Date + StationData$Time
+
+# Correzione time zone locale:
+# StationData$DateTime <- force_tz(StationData$Date + StationData$Time, "Europe/Rome")
+
 ```
 
 Posso richiamare le righe e le colonne del dataset non solo per numero (`1:10`) ma anche per nome, utilizzando un vettore di stringhe dei nomi delle colonne, nell'ordine in cui voglio che compaiano nell'output. Il dataset di partenza `StationData` non viene modificato.
@@ -948,3 +952,158 @@ write.table(toLAKES, paste0(resfolder, StationDataRootName,"_LAKES.txt"),
 
 Fine. Buon lavoro!
 
+
+
+
+## P.S. TIMEZONES
+
+Verifica del fuso orario tramite confronto dei dati di radiazione con la stazione di Bologna Urbana.
+
+Seleziono due intervalli di pochi giorni, uno in estate e uno in inverno per valutare la presenza dell'ora legale, e scarico i dati di radiazione solare da dext3r per la stazione Bologna Urbana.
+
+```{r}
+stSum <- ymd_hm("201506010030")
+enSum <- ymd_hm("201506040000")
+
+stWin <- ymd_hm("201512010030")
+enWin <- ymd_hm("201512040000")
+
+DavisSum <- StationData %>% 
+  select(DateTime, totRad) %>%
+  filter(DateTime >= stSum,
+         DateTime <  enSum)
+
+DavisWin <- StationData %>% 
+  select(DateTime, totRad) %>%
+  filter(DateTime >= stWin,
+         DateTime <  enWin)
+
+BoUrbSum <- read_csv(
+  paste0(datafolder, "dexter-540faa09-8ed4-4cd1-a3fb-bb9abb0befcc.csv"),
+  skip  = 3,
+  n_max = 75,
+  col_types = cols(
+    `Fine validità (UTC)`   = col_datetime(format = "%Y-%m-%d %H:%M:00+00:00"), 
+    `Inizio validità (UTC)` = col_datetime(format = "%Y-%m-%d %H:%M:00+00:00")))
+
+colnames(BoUrbSum) <- c('Init', 'DateTime', 'totRad')
+
+BoUrbSum <- BoUrbSum %>% select(DateTime, totRad)
+
+
+BoUrbWin <- read_csv(
+  paste0(datafolder, "dexter-883c06b6-e7ab-47a5-94f0-40c0b61d6f3f.csv"),
+  skip  = 3,
+  n_max = 73,
+  col_types = cols(
+    `Fine validità (UTC)`   = col_datetime(format = "%Y-%m-%d %H:%M:00+00:00"), 
+    `Inizio validità (UTC)` = col_datetime(format = "%Y-%m-%d %H:%M:00+00:00")))
+
+colnames(BoUrbWin) <- c('Init', 'DateTime', 'totRad')
+
+BoUrbWin <- BoUrbWin %>% select(DateTime, totRad)
+
+```
+
+
+Confronto le due serie temporali estive con un plot linea.
+
+```{r}
+a <- DavisSum %>%
+  ggplot(aes(DateTime, totRad, color = "DavisA")) +
+  geom_line() + 
+  labs(colour = "Stazione", 
+       title = "Estate: ora legale") +
+  theme_bw()
+
+a + geom_line(data = BoUrbSum,
+              aes(DateTime, totRad, color = "BoUrb"))
+
+```
+
+```{r}
+
+b <- DavisWin %>%
+  ggplot(aes(DateTime, totRad, color = "DavisA")) +
+  geom_line() + 
+  labs(colour = "Stazione",
+       title = "Inverno: ora solare") +
+  theme_bw()
+
+b + geom_line(data = BoUrbWin,
+              aes(DateTime, totRad, color = "BoUrb"))
+
+```
+
+Controllo visivo: 
+Sono evidenti gli sfasamenti tra i dati di Bologna Urbana (UTC) e i dati della stazione Davis. In estate lo sfasamento è maggiore (CEST = UTC + 2) rispetto all'inverno (CET = UTC + 1)
+
+
+Cerco la conferma numerica.
+
+```{r}
+DavisSum %>% 
+  group_by(day(DateTime)) %>%
+  filter(totRad == max(totRad))
+
+```
+```{r}
+DavisWin %>% 
+  group_by(day(DateTime)) %>%
+  filter(totRad == max(totRad))
+```
+
+
+```{r}
+BoUrbSum %>%
+  group_by(day(DateTime)) %>%
+  filter(totRad == max(totRad))
+
+```
+
+```{r}
+BoUrbWin %>% 
+  group_by(day(DateTime)) %>%
+  filter(totRad == max(totRad))
+
+```
+
+
+Implemento la correzione tramite la funzione `force_tz()`.
+```{r}
+StationData$DateTime <- force_tz(StationData$Date + StationData$Time, "Europe/Rome")
+```
+
+Ricreo i due grafici:
+```{r}
+StationData %>% 
+  select(DateTime, totRad) %>%
+  filter(DateTime >= stSum,
+         DateTime <  enSum) %>%
+  ggplot(aes(DateTime, totRad, color = "DavisA")) +
+  geom_line() + 
+  labs(colour = "Stazione", 
+       title = "Estate: ora legale") +
+  geom_line(data = BoUrbSum,
+            aes(DateTime, totRad, color = "BoUrb")) +
+theme_bw()
+
+StationData %>% 
+  select(DateTime, totRad) %>%
+  filter(DateTime >= stWin,
+         DateTime <  enWin) %>%
+  ggplot(aes(DateTime, totRad, color = "DavisA")) +
+  geom_line() + 
+  labs(colour = "Stazione",
+       title = "Inverno: ora solare") +
+  geom_line(data = BoUrbWin,
+            aes(DateTime, totRad, color = "BoUrb")) +
+  theme_bw()
+
+```
+Ora l'allineamento è perfetto!
+
+Definire la time zone non come "CET" o "CEST" ma come **"Europe/Rome"** permette di gestire efficacemente il cambio tra ora solare e ora legale.
+
+
+Fine (bis)
