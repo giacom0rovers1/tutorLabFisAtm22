@@ -328,7 +328,7 @@ StationData %>%
     Interval == 30
   ) %>%
   ggplot(aes(year(DateTime), fill = Season)) + 
-  geom_histogram(binwidth = 1) +
+  geom_histogram(binwidth = 1, color = "black") +
   # more colors at https://r-charts.com/colors/
   scale_fill_manual(values = c("DJF" = "dodgerblue1",
                                "MAM" = "springgreen3",
@@ -361,7 +361,7 @@ StationData %>%
   ggplot(aes(hour(Time), wndSpeed, color = Season)) + 
   geom_count() +
   facet_wrap(~Season) +               # divido in quattro box
-  coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
+  coord_cartesian(ylim = c(0, 8)) +  # taglio alcuni valori estremi
   
   scale_color_manual(values = c("DJF" = "dodgerblue1",
                                 "MAM" = "springgreen3",
@@ -386,7 +386,7 @@ StationData %>%
   ggplot(aes(hour(Time), wndSpeed, color = Season)) + 
   geom_point() +                      # issue: overplotting
   facet_wrap(~Season) +               # divido in quattro box
-  coord_cartesian(ylim = c(0, 10)) +  # taglio alcuni valori estremi
+  coord_cartesian(ylim = c(0, 8)) +  # taglio alcuni valori estremi
   
   scale_color_manual(values = c("DJF" = "dodgerblue1",
                                 "MAM" = "springgreen3",
@@ -418,6 +418,33 @@ StationData %>%
 ```
 
 ------------------------------------------------------------------------
+
+### Boxplots
+
+Per analizzare distribuzioni di variabili continue rispetto a variabili discrete (formato: factor) posso utilizzare i **boxplots**, che mi mostrano varie informazioni statistiche raggruppate.
+
+```{r}
+# Un esempio di grafico con la suite ggplot2 preceduta da un filtro
+StationData %>%
+  filter(
+    Interval == 30,
+    Press > 800,
+    outTemp > -30,
+    outHum > 0,
+    totRad > 0
+  ) %>%
+  ggplot(aes(Season, wndSpeed, fill = Season)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 8)) +  # taglio alcuni valori estremi
+  
+  scale_fill_manual(values = c("DJF" = "dodgerblue1",
+                               "MAM" = "springgreen3",
+                               "JJA" = "goldenrod1",
+                               "SON" = "indianred1")) +
+  theme_bw()
+```
+*Sono visibili gli andamenti delle medie dei raggruppamenti (linea nera spessa), lo spread tra primo e terzo quartile (IQR, box colorato), l'estensione dell'intervallo al 95% di confidenza (barre nere sottili, dette "whiskers") e i singoli outliers (pallini).*
+
 
 ------------------------------------------------------------------------
 
@@ -683,103 +710,6 @@ fig2
 
 ```
 
--------------------------------------------------------------------------
-
-### Manipolazione dei dati
-
-Con le funzioni `group_by()` e `summarise()` di `dplyr` posso fare in pochi istanti operazione e statistiche su variabili aggregate. Calcolo qui ad esempio le velocità medie giornaliere, raggruppando secondo `date(DateTime)`. Questo comando permette di identificare univocamente ogni giornata ed aggregare le ore all'interno di essa.
-
-Attenzione perché se invece avessimo usato ad esempio `day(DateTime)`, il programma andrebbe a raggruppare assieme tutti i giorni 1, 2, 3, etc.. di ogni mese, perdendo la differenziazione mensile ed annuale (avremo cioè un dataset finale di 31 righe). Fondamentale quindi è individuare il parametro corretto su cui raggruppare.
-
-```{r}
-windData_filtered %>% 
-  group_by(date(DateTime)) %>%
-  summarise(DailyAvg = mean(wndSpeed)) %>% head(10)
-
-```
-
-#### Daily Wind
-
-Utilizzo queste funzioni di manipolazione per ottenere rapidamente la figura "DailyWind" dove si analizza il ciclo diurno/notturno del vento. In questo caso il parametro di raggruppamento è `hour(DateTime)` e le statistiche necessarie sono la media e la deviazione standard del vento e la media delle direzioni (da interpretare però con attenzione..).
-
-Aggiungo un coefficiente di scaling per mostrare entrambe le grandezze nello stesso plot.
-
-```{r message=FALSE, warning=FALSE}
-vmax  <- 2                          # fixed max value for y-axis
-coeff <- 360/vmax                   # scaling of the second axis and variable
-
-fig3 <- windData_filtered %>% 
-  group_by(
-    hour(DateTime)
-  ) %>%
-  summarise(
-    HourlyAvg = mean(wndSpeed),
-    HourlyStDev = sd(wndSpeed),
-    HourlyWDir = mean(wndDir),
-  ) %>% 
-  
-  ggplot(aes(`hour(DateTime)`, HourlyAvg)) + 
-  geom_line() + 
-  geom_point() +
-  geom_line(aes(y=HourlyStDev), linetype = "dashed") + 
-  geom_line(aes(y=HourlyWDir/coeff), color = "red") + 
-  
-  coord_cartesian(ylim = c(0, vmax)) + 
-  scale_y_continuous(
-    name     = "Hourly wind (m/s): average (solid) and sd (dashed)",
-    sec.axis = sec_axis(~.*coeff, name="Hourly mean wind direction (°)") 
-  ) +
-  
-  theme_bw() + 
-  theme(
-    axis.title.y.right = element_text(color = "red"),
-    axis.text.y.right  = element_text(color = "red"),
-    axis.ticks.y.right = element_line(color = "red")
-  )
-
-fig3
-
-```
-
-
-In questo caso, per differenziare secondo la stagione non basta aggiungere `+ facet_wrap(~Season)` perché la variabile Season non è stata conservata da `summarise()`. Bisogna quindi riscrivere la funzione, aggiungendo Season in `group_by()`.
-
-```{r message=FALSE, warning=FALSE}
-
-windData_filtered %>% 
-  group_by(
-    hour(DateTime), 
-    Season                     # now the Season information is kept
-  ) %>%
-  summarise(
-    HourlyAvg = mean(wndSpeed),
-    HourlyStDev = sd(wndSpeed),
-    HourlyWDir = mean(wndDir),
-  ) %>% 
-  
-  ggplot(aes(`hour(DateTime)`, HourlyAvg)) + 
-  geom_line() + 
-  geom_point() +
-  geom_line(aes(y=HourlyStDev), linetype = "dashed") + 
-  geom_line(aes(y=HourlyWDir/coeff), color = "red") + 
-  
-  facet_wrap(~Season) +        # and the plot faceting works
-  
-  coord_cartesian(ylim = c(0, vmax)) + 
-  scale_y_continuous(
-    name     = "Hourly wind (m/s): average (solid) and sd (dashed)",
-    sec.axis = sec_axis(~.*coeff, name="Hourly mean wind direction (°)") 
-  ) +
-  
-  theme_bw() + 
-  theme(
-    axis.title.y.right = element_text(color = "red"),
-    axis.text.y.right  = element_text(color = "red"),
-    axis.ticks.y.right = element_line(color = "red")
-  )
-
-```
-
 ------------------------------------------------------------------------
 
 ### Statistiche
@@ -908,8 +838,6 @@ ggsave(filenames$figure.HistWS, plot = fig1)
 
 ggsave(filenames$figure.DataConsistency, plot = fig2)
 
-ggsave(filenames$figure.DailyWind, plot = fig3)
-
 ggsave(filenames$figure.ScatterPlot, plot = fig4)
 
 ```
@@ -956,72 +884,49 @@ I dati delle stazioni della rete regionale sono **scaricabili liberamente** dall
 
 Nella **lettura dei dati** con `read_table` bisogna specificare manualmente le righe da leggere, partendo dalla riga dei nomi colonna (compresa) ed arrivando alle righe di descrizione della stazione in coda al file (escluse). Utilizzare i parametri `skip` e `n_mmax`.
 ```{r}
-BoUrbana_totRad <- read_csv(
-  paste0(datafolder, "dexter-540faa09-8ed4-4cd1-a3fb-bb9abb0befcc.csv"),
-  skip  = 3,
-  n_max = 75,  # 
+BoUrbana_wndSpeed <- read_csv(
+  paste0(datafolder, "dexter-0717a628-12b6-4fac-a50b-5861c06b13ea.csv"),
+  skip  = 3,  # salto le prime tre righe di intestazione
+  n_max = 75,  # salto le righe finali coi dati della stazione
   col_types = cols(
     `Fine validità (UTC)`   = col_datetime(format = "%Y-%m-%d %H:%M:00+00:00"), 
     `Inizio validità (UTC)` = col_datetime(format = "%Y-%m-%d %H:%M:00+00:00")))
 
-colnames(BoUrbana_totRad) <- c('Init', 'DateTime', 'totRad')
-BoUrbana_totRad <- select(BoUrbana_totRad, DateTime, totRad)
+colnames(BoUrbana_wndSpeed) <- c('Init', 'DateTime', 'wndSpeed')
+BoUrbana_wndSpeed <- select(BoUrbana_wndSpeed, DateTime, wndSpeed)
 ```
 
 
 I dati delle stazioni di UniBo sono in ora locale (timezone CET e CEST in base alla stagione). Per il confronto con BolognaUrbana (timezone UTC) bisogna **convertirli** con il comando `force_tz()`.
 ```{r}
-HourlyData$DateTime <- force_tz(HourlyData$Date + HourlyData$Time, "Europe/Rome")
+windData_filtered$DateTime <- force_tz(windData_filtered$DateTime, "Europe/Rome")
 
 ```
-Sostituire qui `hourlyData` con `StationData` o `windData_filtered` o qualunque altro dataset di interesse per i confronti.
 
 Per un confronto efficace bisogna garantire la **corrispondenza temporale** dei due datasets. 
 Anche in questo caso, al posto di scrivere condizioni *if* innestate in cicli *for*, utilizzo una funzione di `dplyr` ottimizzata per questa task: `inner_join(..., by = DateTime)`
 
 ```{r}
-combData <- inner_join(select(HourlyData, DateTime, totRad), BoUrbana_totRad, 
+combData <- inner_join(select(windData_filtered, DateTime, wndSpeed), BoUrbana_wndSpeed, 
                        by = "DateTime",
                        suffix = c("_Davis", "_BoUrb"))
 
 combData %>%  head(10)
 ```
 
-I dati così formattati sono già pronti per uno **scatterplot**.
+I dati così formattati sono già pronti per uno **scatterplot** (a puro scopo di esempio).
 
 ```{r}
-ggplot(combData, aes(totRad_BoUrb, totRad_Davis)) + 
+ggplot(combData, aes(wndSpeed_BoUrb, wndSpeed_Davis, color = hour(DateTime))) + 
   geom_count() + 
   geom_abline(slope = 1, intercept = 0, alpha = 0.2) + 
-  scale_size_area() +
-  coord_fixed() +
+  # scale_size_area() +
+  coord_fixed(xlim = c(0,8),
+              ylim = c(0,8)) +
+  labs(color = "Ora del giorno") +
   theme_bw()
 
 ```
-
-Posso però riscrivere i dati in **formato tidy** per un migliore confronto grafico delle serie temporali tramite la funzione `pivot_longer`: le due stazioni passano da nomi di colonna a factors di una nuova colonna "Stazione".
-```{r}
-tidyData <- combData %>% 
-  
-  rename(Davis = totRad_Davis,
-         BoUrb = totRad_BoUrb
-  ) %>%
-  
-  pivot_longer(cols = 2:3,
-               names_to = "Stazione",
-               values_to = "totRad")
-
-tidyData %>% head(10)
-```
-
-In questo modo il confronto delle **serie temporali** è immediato impostando `aes(color = Stazione)`.
-
-```{r}
-ggplot(tidyData, aes(DateTime, totRad, color = Stazione)) + 
-  geom_line() + 
-  theme_bw()
-```
-
 
 Potete poi procedere per i confronti con tutti gli strumenti grafici e statistici che abbiamo già presentato nelle sezioni precedenti.
 
@@ -1029,13 +934,155 @@ Potete poi procedere per i confronti con tutti gli strumenti grafici e statistic
 Fine. Buon lavoro!
 
 
+-------------------------------------------------------------------------
+
+## Appendice 1
+
+### Manipolazione dei dati
 
 
-## Appendice 
+#### Tidy data e pivoting
+Posso però riscrivere i dati in **formato tidy** per un migliore confronto grafico delle serie temporali tramite la funzione `pivot_longer`: le due stazioni passano da nomi di colonna a factors di una nuova colonna "Stazione".
+```{r}
+tidyData <- combData %>% 
+  
+  rename(Davis = wndSpeed_Davis,
+         BoUrb = wndSpeed_BoUrb
+  ) %>%
+  
+  pivot_longer(cols = 2:3,
+               names_to = "Stazione",
+               values_to = "wndSpeed")
+
+tidyData %>% head(10)
+```
+
+In questo modo il confronto delle **serie temporali** è immediato impostando `aes(color = Stazione)`.
+
+```{r}
+ggplot(tidyData, aes(DateTime, wndSpeed, color = Stazione)) + 
+  geom_line(size = 0.8) + 
+  theme_bw()
+```
+
+Così come per le **distribuzioni**.
+
+```{r}
+ggplot(tidyData, aes(wndSpeed, fill = Stazione)) + 
+  geom_histogram(binwidth = 0.5, position = "dodge", color = "black") + 
+  # geom_freqpoly(binwidth = 0.5) +
+  theme_bw()
+```
+
+-------------------------------------------------------------------------
+
+#### Statistiche aggregate
+
+Con le funzioni `group_by()` e `summarise()` di `dplyr` posso fare in pochi istanti operazione e statistiche su variabili aggregate. Calcolo qui ad esempio le velocità medie giornaliere, raggruppando secondo `date(DateTime)`. Questo comando permette di identificare univocamente ogni giornata ed aggregare le ore all'interno di essa.
+
+Attenzione perché se invece avessimo usato ad esempio `day(DateTime)`, il programma andrebbe a raggruppare assieme tutti i giorni 1, 2, 3, etc.. di ogni mese, perdendo la differenziazione mensile ed annuale (avremo cioè un dataset finale di 31 righe). Fondamentale quindi è individuare il parametro corretto su cui raggruppare.
+
+```{r}
+windData_filtered %>% 
+  group_by(date(DateTime)) %>%
+  summarise(DailyAvg = mean(wndSpeed)) %>% head(10)
+
+```
+
+#### Daily Wind
+
+Utilizzo queste funzioni di manipolazione per ottenere rapidamente la figura "DailyWind" dove si analizza il ciclo diurno/notturno del vento. In questo caso il parametro di raggruppamento è `hour(DateTime)` e le statistiche necessarie sono la media e la deviazione standard del vento e la media delle direzioni (da interpretare però con attenzione..).
+
+Aggiungo un coefficiente di scaling per mostrare entrambe le grandezze nello stesso plot.
+
+```{r message=FALSE, warning=FALSE}
+vmax  <- 2                          # fixed max value for y-axis
+coeff <- 360/vmax                   # scaling of the second axis and variable
+
+fig3 <- windData_filtered %>% 
+  group_by(
+    hour(DateTime)
+  ) %>%
+  summarise(
+    HourlyAvg = mean(wndSpeed),
+    HourlyStDev = sd(wndSpeed),
+    HourlyWDir = mean(wndDir),
+  ) %>% 
+  
+  ggplot(aes(`hour(DateTime)`, HourlyAvg)) + 
+  geom_line() + 
+  geom_point() +
+  geom_line(aes(y=HourlyStDev), linetype = "dashed") + 
+  geom_line(aes(y=HourlyWDir/coeff), color = "red") + 
+  
+  coord_cartesian(ylim = c(0, vmax)) + 
+  scale_y_continuous(
+    name     = "Hourly wind (m/s): average (solid) and sd (dashed)",
+    sec.axis = sec_axis(~.*coeff, name="Hourly mean wind direction (°)") 
+  ) +
+  
+  theme_bw() + 
+  theme(
+    axis.title.y.right = element_text(color = "red"),
+    axis.text.y.right  = element_text(color = "red"),
+    axis.ticks.y.right = element_line(color = "red")
+  )
+
+ggsave(filenames$figure.DailyWind, plot = fig3)
+
+fig3
+
+```
+
+
+In questo caso, per differenziare secondo la stagione non basta aggiungere `+ facet_wrap(~Season)` perché la variabile Season non è stata conservata da `summarise()`. Bisogna quindi riscrivere la funzione, aggiungendo Season in `group_by()`.
+
+```{r message=FALSE, warning=FALSE}
+
+windData_filtered %>% 
+  group_by(
+    hour(DateTime), 
+    Season                     # now the Season information is kept
+  ) %>%
+  summarise(
+    HourlyAvg = mean(wndSpeed),
+    HourlyStDev = sd(wndSpeed),
+    HourlyWDir = mean(wndDir),
+  ) %>% 
+  
+  ggplot(aes(`hour(DateTime)`, HourlyAvg)) + 
+  geom_line() + 
+  geom_point() +
+  geom_line(aes(y=HourlyStDev), linetype = "dashed") + 
+  geom_line(aes(y=HourlyWDir/coeff), color = "red") + 
+  
+  facet_wrap(~Season) +        # and the plot faceting works
+  
+  coord_cartesian(ylim = c(0, vmax)) + 
+  scale_y_continuous(
+    name     = "Hourly wind (m/s): average (solid) and sd (dashed)",
+    sec.axis = sec_axis(~.*coeff, name="Hourly mean wind direction (°)") 
+  ) +
+  
+  theme_bw() + 
+  theme(
+    axis.title.y.right = element_text(color = "red"),
+    axis.text.y.right  = element_text(color = "red"),
+    axis.ticks.y.right = element_line(color = "red")
+  )
+
+```
+
+
+
+-------------------------------------------------------------------------
+
+## Appendice 2
 
 ### Verifica del fuso orario dei dati delle stazioni Davis tramite il confronto con la stazione di Bologna Urbana dei dati di radiazione solare.
 
-**1.** Seleziono due intervalli di pochi giorni, uno in estate e uno in inverno per valutare la presenza dell'ora legale, e scarico i dati di radiazione solare da dext3r per la stazione Bologna Urbana.
+#### 1. Acquisizione dati
+Seleziono due intervalli di pochi giorni, uno in estate e uno in inverno per valutare la presenza dell'ora legale, e scarico i dati di radiazione solare da dext3r per la stazione Bologna Urbana.
 
 ```{r}
 stSum <- ymd_hm("201506010030")
@@ -1082,7 +1129,8 @@ BoUrbWin <- BoUrbWin %>% select(DateTime, totRad)
 ```
 
 
-**2.** Controllo visivo: confronto le due serie temporali estive con un plot linea.
+#### 2. Controllo visivo
+Confronto le serie temporali estive e invernali plottando le curve dei valori di totRad.
 
 ```{r}
 a <- DavisSum %>%
@@ -1111,10 +1159,11 @@ b + geom_line(data = BoUrbWin,
 
 ```
 
-Sono evidenti gli sfasamenti tra i dati di Bologna Urbana (UTC) e i dati della stazione Davis. In estate lo sfasamento è maggiore (CEST = UTC + 2) rispetto all'inverno (CET = UTC + 1)
+*Sono evidenti gli sfasamenti tra i dati di Bologna Urbana (UTC) e i dati della stazione Davis. In estate lo sfasamento è maggiore (CEST = UTC + 2) rispetto all'inverno (CET = UTC + 1)*
 
 
-**3.** Controllo numerico: cerco la conferma stampando l'ora dei massimi.
+#### 3. Controllo numerico
+Cerco la conferma stampando l'ora dei massimi.
 
 ```{r}
 DavisSum %>% 
@@ -1144,12 +1193,14 @@ BoUrbWin %>%
 ```
 
 
-**4.** Implemento la correzione tramite la funzione `force_tz()`.
+#### 4. Correzione
+Implemento la correzione tramite la funzione `force_tz()`.
 ```{r}
-StationData$DateTime <- force_tz(StationData$Date + StationData$Time, "Europe/Rome")
+StationData$DateTime <- force_tz(StationData$DateTime, "Europe/Rome")
 ```
 
-**5.** Ricreo i due grafici:
+#### 5. Verifica
+Ricreo i due grafici precedenti:
 ```{r}
 StationData %>% 
   select(DateTime, totRad) %>%
@@ -1176,9 +1227,11 @@ StationData %>%
   theme_bw()
 
 ```
-Ora l'allineamento è perfetto!
+*Ora l'allineamento è perfetto!*
 
-**N.B.** Definire la time zone non come "CET" o "CEST" ma come **"Europe/Rome"** permette di gestire efficacemente il cambio tra ora solare e ora legale.
+**N.B.** 
+
+Definire la time zone non come "CET" o "CEST" ma come **"Europe/Rome"** permette di gestire in automatico il cambio tra ora solare e ora legale.
 
 
 Fine. (bis)
