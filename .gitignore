@@ -48,3 +48,6 @@ vignettes/*.pdf
 
 # Data Archives
 *.RData
+
+# LibreOffice cache
+.~lock*

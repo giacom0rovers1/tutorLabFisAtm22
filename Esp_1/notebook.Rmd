@@ -845,25 +845,35 @@ ggsave(filenames$figure.ScatterPlot, plot = fig4)
 
 #### File testuale TXT (per WRPLOT)
 
-Converto i dati nel formato richiesto dal software per la visualizzazione interattiva delle rose dei venti:
+Preparo un file da dare in input al software per la visualizzazione interattiva delle rose dei venti.
+
+WRPlot accetta solo dati orari (nel caso di più misure relative alla stessa ora, considera solo la prima). Di seguito il filtro per selezionare solo dati orari. Si potrebbe anche decidere di aggregare i dati a risoluzione più  alta (ad es. 30 min) con una media (si vedano al proposito gli strumenti suggeriti nell'appendice 1).
+```{r}
+windData_filtered_hourly <- windData_filtered %>%
+  filter(minute(DateTime) == 0)
+
+```
+
+
+Il dataset orario viene formattato secondo i requisiti del programma.
 ```{r}
 toLAKES <- tibble(
-  StID = rep(99999,dim(windData_filtered)[1]),               # Station ID (flag)
+  StID = rep(99999,dim(windData_filtered_hourly)[1]),      # Station ID (flag)
   
-  YYYY = year(windData_filtered$DateTime),                   # year
-  MM   = month(windData_filtered$DateTime),                  # month
-  DD   = day(windData_filtered$DateTime),                    # day
-  HH   = hour(windData_filtered$DateTime),                   # hour
+  YYYY = year (windData_filtered_hourly$DateTime),         # year
+  MM   = month(windData_filtered_hourly$DateTime),         # month
+  DD   = day  (windData_filtered_hourly$DateTime),         # day
+  HH   = hour (windData_filtered_hourly$DateTime),         # hour
   
-  Dir  = round(windData_filtered$wndDir,digits=0),           # Rounded Wind Direction
-  WS   = round(1.94384*windData_filtered$wndSpeed,digits=0)  # Rounded Wind Speed 
+  Dir  = round(windData_filtered_hourly$wndDir, digits=0), # Rounded Wind Direction
+  WS   = round(1.94384*windData_filtered_hourly$wndSpeed, digits=0) # Rounded Wind Speed 
   # (1 knot = 1.94384 m/s)
 )
 
 head(as.matrix(toLAKES))
 ```
 
-Preparo il file di output con lintestazione e scrivo i dati. Il parametro `append = TRUE` mi garantisce che l'intestazione non venga sovrascritta.
+Creo il file di output con lintestazione e scrivo i dati. Il parametro `append = TRUE` mi garantisce che l'intestazione non venga sovrascritta.
 
 ```{r}
 # Append the "LAKES FORMAT" string at the beginning of the file
@@ -886,7 +896,8 @@ I dati delle stazioni della rete regionale sono **scaricabili liberamente** dall
 Nella **lettura dei dati** con `read_table` bisogna specificare manualmente le righe da leggere, partendo dalla riga dei nomi colonna (compresa) ed arrivando alle righe di descrizione della stazione in coda al file (escluse). Utilizzare i parametri `skip` e `n_mmax`.
 ```{r}
 BoUrbana_wndSpeed <- read_csv(
-  paste0(datafolder, "dexter-0717a628-12b6-4fac-a50b-5861c06b13ea.csv"),
+  # paste0(datafolder, "dexter-0717a628-12b6-4fac-a50b-5861c06b13ea.csv"),
+  paste0(datafolder, "dexter-1fd532da-66e3-4154-bd5d-4f67a0a530b9.csv"),
   skip  = 3,  # salto le prime tre righe di intestazione
   n_max = 75,  # salto le righe finali coi dati della stazione
   col_types = cols(
@@ -920,8 +931,8 @@ I dati così formattati sono già pronti per uno **scatterplot** (a puro scopo d
 ```{r}
 ggplot(combData, aes(wndSpeed_BoUrb, wndSpeed_Davis, color = hour(DateTime))) + 
   geom_count() + 
-  geom_abline(slope = 1, intercept = 0, alpha = 0.2) + 
-  # scale_size_area() +
+  geom_abline(slope = 1, intercept = 0, alpha = 0.2) +
+  scale_size_area() +
   coord_fixed(xlim = c(0,8),
               ylim = c(0,8)) +
   labs(color = "Ora del giorno") +
@@ -979,7 +990,20 @@ ggplot(tidyData, aes(wndSpeed, fill = Stazione)) +
 
 #### Statistiche aggregate
 
-Con le funzioni `group_by()` e `summarise()` di `dplyr` posso fare in pochi istanti operazione e statistiche su variabili aggregate. Calcolo qui ad esempio le velocità medie giornaliere, raggruppando secondo `date(DateTime)`. Questo comando permette di identificare univocamente ogni giornata ed aggregare le ore all'interno di essa.
+Con le funzioni `group_by()` e `summarise()` di `dplyr` posso fare in pochi istanti operazione e statistiche su variabili aggregate. Calcolo qui ad esempio le velocità medie orarie (ovvero, dato il nostro dataset, sto mediando il dato delle "00" e quello dei "30").
+
+```{r}
+# Creo una stringa univoca per ogni ora
+windData_filtered$DateTimeH <- date(windData_filtered$DateTime) + hour(windData_filtered$DateTime)
+
+windData_filtered %>% 
+  group_by(DateTimeH) %>%
+  summarise(HourlyAvg = mean(wndSpeed)) %>% head(10)
+
+```
+
+
+Oppure posso calcolare le velocità medie giornaliere, raggruppando secondo `date(DateTime)`. Questo comando permette di identificare univocamente ogni giornata ed aggregare le ore all'interno di essa.
 
 Attenzione perché se invece avessimo usato ad esempio `day(DateTime)`, il programma andrebbe a raggruppare assieme tutti i giorni 1, 2, 3, etc.. di ogni mese, perdendo la differenziazione mensile ed annuale (avremo cioè un dataset finale di 31 righe). Fondamentale quindi è individuare il parametro corretto su cui raggruppare.
 
