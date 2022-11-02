@@ -872,8 +872,8 @@ fig4 <- windD %>%
               intercept = fitLM$coefficients[1], linetype = 2, colour = 'red') + 
   annotate('text', x=6.5, y=4.3, label = textLM, color="red") + 
   ggtitle("Wind speed (m/s)") +
-  xlab('davis01') +
-  ylab('davis01_FAKE') +
+  xlab('DavisA') +
+  ylab('Davis_Synthetic') +
   geom_abline(slope = 1, intercept = 0, alpha = 0.2) + 
   coord_fixed(xlim = c(0,8),
               ylim = c(0,8)) +
@@ -950,16 +950,92 @@ write.table(toLAKES, paste0(resfolder, StationDataRootName,"_LAKES.txt"),
 ```
 
 
+### Confronto dati DIFA - Arpae
+
+I dati delle stazioni della rete regionale sono **scaricabili liberamente** dalla piattaforma dext3r (https://simc.arpae.it/dext3r/) selezionando il periodo e le variabili prescelte.
+
+Nella **lettura dei dati** con `read_table` bisogna specificare manualmente le righe da leggere, partendo dalla riga dei nomi colonna (compresa) ed arrivando alle righe di descrizione della stazione in coda al file (escluse). Utilizzare i parametri `skip` e `n_mmax`.
+```{r}
+BoUrbana_totRad <- read_csv(
+  paste0(datafolder, "dexter-540faa09-8ed4-4cd1-a3fb-bb9abb0befcc.csv"),
+  skip  = 3,
+  n_max = 75,  # 
+  col_types = cols(
+    `Fine validità (UTC)`   = col_datetime(format = "%Y-%m-%d %H:%M:00+00:00"), 
+    `Inizio validità (UTC)` = col_datetime(format = "%Y-%m-%d %H:%M:00+00:00")))
+
+colnames(BoUrbana_totRad) <- c('Init', 'DateTime', 'totRad')
+BoUrbana_totRad <- select(BoUrbana_totRad, DateTime, totRad)
+```
+
+
+I dati delle stazioni di UniBo sono in ora locale (timezone CET e CEST in base alla stagione). Per il confronto con BolognaUrbana (timezone UTC) bisogna **convertirli** con il comando `force_tz()`.
+```{r}
+HourlyData$DateTime <- force_tz(HourlyData$Date + HourlyData$Time, "Europe/Rome")
+
+```
+Sostituire qui `hourlyData` con `StationData` o `windData_filtered` o qualunque altro dataset di interesse per i confronti.
+
+Per un confronto efficace bisogna garantire la **corrispondenza temporale** dei due datasets. 
+Anche in questo caso, al posto di scrivere condizioni *if* innestate in cicli *for*, utilizzo una funzione di `dplyr` ottimizzata per questa task: `inner_join(..., by = DateTime)`
+
+```{r}
+combData <- inner_join(select(HourlyData, DateTime, totRad), BoUrbana_totRad, 
+                       by = "DateTime",
+                       suffix = c("_Davis", "_BoUrb"))
+
+combData %>%  head(10)
+```
+
+I dati così formattati sono già pronti per uno **scatterplot**.
+
+```{r}
+ggplot(combData, aes(totRad_BoUrb, totRad_Davis)) + 
+  geom_count() + 
+  geom_abline(slope = 1, intercept = 0, alpha = 0.2) + 
+  scale_size_area() +
+  coord_fixed() +
+  theme_bw()
+
+```
+
+Posso però riscrivere i dati in **formato tidy** per un migliore confronto grafico delle serie temporali tramite la funzione `pivot_longer`: le due stazioni passano da nomi di colonna a factors di una nuova colonna "Stazione".
+```{r}
+tidyData <- combData %>% 
+  
+  rename(Davis = totRad_Davis,
+         BoUrb = totRad_BoUrb
+  ) %>%
+  
+  pivot_longer(cols = 2:3,
+               names_to = "Stazione",
+               values_to = "totRad")
+
+tidyData %>% head(10)
+```
+
+In questo modo il confronto delle **serie temporali** è immediato impostando `aes(color = Stazione)`.
+
+```{r}
+ggplot(tidyData, aes(DateTime, totRad, color = Stazione)) + 
+  geom_line() + 
+  theme_bw()
+```
+
+
+Potete poi procedere per i confronti con tutti gli strumenti grafici e statistici che abbiamo già presentato nelle sezioni precedenti.
+
+
 Fine. Buon lavoro!
 
 
 
 
-## P.S. TIMEZONES
+## Appendice 
 
-Verifica del fuso orario tramite confronto dei dati di radiazione con la stazione di Bologna Urbana.
+### Verifica del fuso orario dei dati delle stazioni Davis tramite il confronto con la stazione di Bologna Urbana dei dati di radiazione solare.
 
-Seleziono due intervalli di pochi giorni, uno in estate e uno in inverno per valutare la presenza dell'ora legale, e scarico i dati di radiazione solare da dext3r per la stazione Bologna Urbana.
+**1.** Seleziono due intervalli di pochi giorni, uno in estate e uno in inverno per valutare la presenza dell'ora legale, e scarico i dati di radiazione solare da dext3r per la stazione Bologna Urbana.
 
 ```{r}
 stSum <- ymd_hm("201506010030")
@@ -1006,7 +1082,7 @@ BoUrbWin <- BoUrbWin %>% select(DateTime, totRad)
 ```
 
 
-Confronto le due serie temporali estive con un plot linea.
+**2.** Controllo visivo: confronto le due serie temporali estive con un plot linea.
 
 ```{r}
 a <- DavisSum %>%
@@ -1035,11 +1111,10 @@ b + geom_line(data = BoUrbWin,
 
 ```
 
-Controllo visivo: 
 Sono evidenti gli sfasamenti tra i dati di Bologna Urbana (UTC) e i dati della stazione Davis. In estate lo sfasamento è maggiore (CEST = UTC + 2) rispetto all'inverno (CET = UTC + 1)
 
 
-Cerco la conferma numerica.
+**3.** Controllo numerico: cerco la conferma stampando l'ora dei massimi.
 
 ```{r}
 DavisSum %>% 
@@ -1069,12 +1144,12 @@ BoUrbWin %>%
 ```
 
 
-Implemento la correzione tramite la funzione `force_tz()`.
+**4.** Implemento la correzione tramite la funzione `force_tz()`.
 ```{r}
 StationData$DateTime <- force_tz(StationData$Date + StationData$Time, "Europe/Rome")
 ```
 
-Ricreo i due grafici:
+**5.** Ricreo i due grafici:
 ```{r}
 StationData %>% 
   select(DateTime, totRad) %>%
@@ -1086,7 +1161,7 @@ StationData %>%
        title = "Estate: ora legale") +
   geom_line(data = BoUrbSum,
             aes(DateTime, totRad, color = "BoUrb")) +
-theme_bw()
+  theme_bw()
 
 StationData %>% 
   select(DateTime, totRad) %>%
@@ -1103,7 +1178,7 @@ StationData %>%
 ```
 Ora l'allineamento è perfetto!
 
-Definire la time zone non come "CET" o "CEST" ma come **"Europe/Rome"** permette di gestire efficacemente il cambio tra ora solare e ora legale.
+**N.B.** Definire la time zone non come "CET" o "CEST" ma come **"Europe/Rome"** permette di gestire efficacemente il cambio tra ora solare e ora legale.
 
 
-Fine (bis)
+Fine. (bis)
