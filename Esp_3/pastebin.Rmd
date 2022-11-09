@@ -149,6 +149,15 @@ plot(HSAF.raster3b[["201610012057"]],
 
 
 
+```{r}
+par(mfrow=NULL)
+multiSensor <- c(ERA5.final[["201610012100"]], RG.final[["201610012100"]], GPM.final[["201610012100"]], HSAF.final[["201610012057"]])
+
+plot(multisensor)
+
+```
+
+
 uso terra::project per proiettare tutti i dati sulla nuova griglia
 (come viene gestita l'interpolazione??)
 

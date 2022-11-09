@@ -51,3 +51,6 @@ vignettes/*.pdf
 
 # LibreOffice cache
 .~lock*
+
+# Geotiff rasters
+*.tif

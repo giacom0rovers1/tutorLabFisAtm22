@@ -29,7 +29,8 @@ packages <- c(
   "tidyverse",
   "lubridate",
   "zoo",
-  "terra"
+  "terra",
+  "rgdal"
 )
 
 for(pkg in packages){
@@ -69,11 +70,11 @@ GPM.folder   <- paste0(datafolder, "GPM/")
 ERA5.folder   <- paste0(datafolder, "ERA/")
 
 figfolder  <- "figure/"
-# resfolder  <- "risultati/"
+resfolder  <- "risultati/"
 
 # Create the project directories, if missing
 if(!dir.exists(figfolder)){  dir.create(figfolder) }
-# if(!dir.exists(resfolder)){  dir.create(resfolder) }
+if(!dir.exists(resfolder)){  dir.create(resfolder) }
 
 ```
 
@@ -116,8 +117,8 @@ Output: stessa griglia, cumulate orarie (o mm/h medi orari)
 
 
 ```{r}
-CorrectionFactor_HSAF = 3600 # 1
-CorrectionFactor_ERA5 = 1000 # 1
+CorrectionFactor_HSAF = 3600 # kg/m2*s --> mm/h
+CorrectionFactor_ERA5 = 1000 # m/h --> mm/h
 ```
 
 
@@ -195,7 +196,6 @@ plot(
 ```{r}
 # Search GRIB files ------------------------------------------------------------
 HSAF.files <- dir(HSAF.folder, pattern=".grb")
-HSAF.files <- HSAF.files[substr(HSAF.files,9,12)=="1001"]  # scelgo solo 1 giorno... non molto elegante
 length(HSAF.files)
 ```
 
@@ -251,14 +251,19 @@ head(HSAF.df_ITA)
 
 
 ```{r}
-HSAF.raster <- rasterize(cbind(HSAF.df_ITA$Lon, HSAF.df_ITA$Lat), MyGrid, values=as.array(HSAF.df_ITA[["201610012057"]])) * CorrectionFactor_HSAF
-
+HSAF.raster <- rast(MyGrid)
+for(i in 1:length(HSAF.times)){
+  HSAF.raster <- c(HSAF.raster, rasterize(cbind(HSAF.df_ITA$Lon, HSAF.df_ITA$Lat), MyGrid, values=as.array(HSAF.df_ITA[[HSAF.times[i]]])) * CorrectionFactor_HSAF)
+}
+names(HSAF.raster) <- HSAF.times
 HSAF.raster <- clamp(HSAF.raster, 0, values=F)
 
-names(HSAF.raster) <- "201610012057"
 HSAF.raster
+```
 
-plot(HSAF.raster)
+
+```{r}
+plot(HSAF.raster[["201610012057"]])
 plot(GlobalBG, add=T)
 
 plot(ItalyBG, col="grey")
@@ -320,7 +325,6 @@ hist(HSAF.raster, "201610012057")
 ```{r}
 # Search IMR files (ASCII) -----------------------------------------------------
 GPM.files <- dir(GPM.folder, pattern=".imr")
-GPM.files <- GPM.files[substr(GPM.files,5,8)=="1001"]
 length(GPM.files)
 
 ## Import data (Precipitation Rate [mm/h]) --------------------------------------
@@ -367,17 +371,19 @@ names(GPM.list) <- GPM.times
 ```
 
 ```{r}
-GPM.raster <- rasterize(GPM.coordinates2, MyGrid, values=as.array(t(GPM.list[["201610012100"]])))
-
+GPM.raster <- rast(MyGrid)
+for(i in 1:length(GPM.times)){
+  GPM.raster <- c(GPM.raster, rasterize(GPM.coordinates2, MyGrid, values=as.array(t(GPM.list[[GPM.times[i]]]))))
+}
+names(GPM.raster) <- GPM.times
 GPM.raster <- clamp(GPM.raster, 0, values=F)
 
-names(GPM.raster) <- "201610012100" #GPM.times[idGPM]
 GPM.raster
 ```
 
 
 ```{r}
-plot(GPM.raster)
+plot(GPM.raster[["201610012100"]])
 plot(ItalyBG, add =T) #, col = "grey85")
 # ItalyBGfun(NULL, "red")
 
@@ -386,8 +392,8 @@ plot(ItalyBG, add =T) #, col = "grey85")
 
 ```{r}
 plot(
-  clamp(GPM.raster, 0.2, values=F), 
-  main = names(GPM.raster),
+  clamp(GPM.raster[["201610012100"]], 0.2, values=F), 
+  main = names(GPM.raster[["201610012100"]]),
   col=c("blue","green","yellow","orange","red"),  
   xlab   = "Longitude (°E)",
   ylab   = "Latitude (°N)",
@@ -409,7 +415,6 @@ plot(
 ```{r}
 # Search DAT files -------------------------------------------------------------
 RG.files <- dir(RG.folder, pattern=".dat")
-RG.files <- RG.files[substr(RG.files,5,8)=="1001"]
 length(RG.files)
 
 ## Assign Date ------------------------------------------------------------------
@@ -445,21 +450,30 @@ latlon <- latlon %>% filter(
   lon <= 25
 )
 
-RG.raster <- rasterize(cbind(latlon$lon, latlon$lat), MyGrid, values=RG.df[latlon$id,22])
 
+RG.raster <- rast(MyGrid)
+for(i in 1:length(RG.times)){
+  RG.raster <- c(RG.raster, rasterize(cbind(latlon$lon, latlon$lat), MyGrid, values=RG.df[latlon$id,22]))
+}
+names(RG.raster) <- RG.times
+```
+
+
+```{r}
 RG.raster <- clamp(RG.raster, 0, values=F)
 
-names(RG.raster) <- RG.times[22]
 RG.raster
-
-plot(RG.raster)
-plot(ItalyBG, add =T) #, col = "grey85")
-# ItalyBGfun(NULL, "red")
 
 ```
 
 
+```{r}
+plot(RG.raster[["201610012100"]])
+plot(ItalyBG, add =T) #, col = "grey85")
+# ItalyBGfun(NULL, "red")
 
+
+```
 
 
 
@@ -474,26 +488,103 @@ plot(mask(ERA5.MyGrid[["201610012100"]], ItalyBG))
 
 
 
+
+## **NEW** Funzione media oraria
+
 ```{r}
+hourlyMean <- function(IN.raster, IN.times, sel.times){
+  
+  stopifnot(nlyr(IN.raster)==length(IN.times))
+  
+  OUT.raster <- rast(MyGrid)
+  OUT.times  <- character() 
+   
+  for(time in sel.times){
+    # print(time)
+    
+    interval <- format(seq(ymd_hm(time) - hours(1) + minutes(1), 
+                           ymd_hm(time), 
+                           by="1 min"), "%Y%m%d%H%M")
+    
+    idx <- which(IN.times %in% interval)
+    
+    OUT.raster <- c(OUT.raster, mean(IN.raster[[idx]]))
+    OUT.times <- c(OUT.times, time)
+  }
+  
+  names(OUT.raster) <- OUT.times
+  stopifnot(nlyr(OUT.raster)==length(OUT.times))
+  
+  return(OUT.raster) 
+}
 
-ERA5.final <- mask(ERA5.MyGrid[["201610012100"]], ItalyBG)
-RG.final <- mask(RG.raster, ItalyBG)
 
-par(mfrow=c(1,2))
-plot(ERA5.final)
-plot(RG.final)
+```
+
+## **NEW** Selezione di un intervallo comune (raster orari)
+```{r}
+# seleziono i primi dieci giorni
+sel_START <- "201610010100"
+sel_END   <- "201610102300"
+
+sel.times <- format(seq(ymd_hm(sel_START), ymd_hm(sel_END), by="1 hour"), "%Y%m%d%H%M")
+
+```
+
+```{r}
+ERA5.final <- mask(ERA5.MyGrid[[sel.times]], ItalyBG)
+ERA5.final
+```
+
+
+```{r}
+RG.final   <- mask(RG.raster[[sel.times]], ItalyBG)
+RG.final
+
+```
+
+
+## **NEW** Aggregazione: medie orarie
+
+```{r}
+GPM.hourly <- hourlyMean(GPM.raster, GPM.times, sel.times)
+GPM.final  <- mask(GPM.hourly, ItalyBG)
+GPM.final
+
+HSAF.hourly <- hourlyMean(HSAF.raster, HSAF.times, sel.times)
+HSAF.final  <- mask(HSAF.hourly, ItalyBG)
+HSAF.final
 
 ```
 
 
 
+```{r}
+par(mfrow=c(2,2))
+plot(ERA5.final[["201610012100"]])
+plot(RG.final[["201610012100"]])
+plot(HSAF.final[["201610012057"]])
+plot(GPM.final[["201610012100"]])
 
-## Aggregazione: medie orarie
+```
 
-(manca)
+## SALVATAGGIO DEI RASTER "FINAL"
+```{r}
+writeRaster(ERA5.final, paste0(resfolder, "ERA5_final.tif"), overwrite=TRUE )
+writeRaster(RG.final, paste0(resfolder, "RG_final.tif"), overwrite=TRUE )
+writeRaster(GPM.final, paste0(resfolder, "GPM_final.tif"), overwrite=TRUE )
+writeRaster(HSAF.final, paste0(resfolder, "HSAF_final.tif"), overwrite=TRUE )
+
+```
+
+
+Per leggere bisogna usare poi: `readRaster()`
 
 
 
+### **NEW** Funzione per plot mappe
+
+### **NEW** Salvataggio immagini 2x2
 
 
 ## PDFs
@@ -525,10 +616,26 @@ tibble(
 
 
 
-## Indicatori statistici
+## **NEW** Indicatori statistici
 
 
 ```{r}
+statsFun <- function(Var, Ref){
+  avgR  = mean(Ref)
+  SMP   = length(na.omit(Var))
+  COR   = cor(Var, Ref, use = "pairwise.complete.obs")
+  ME    = mean(Var - Ref, na.rm = T)
+  MAE   = mean(abs(Var - Ref), na.rm = T)
+  RMSE  = sqrt(mean((Var - Ref)^2, na.rm = T))
+  MAX   = max(Var, na.rm = T)
+  nME   = ME/avgR
+  nMAE  = MAE/avgR
+  CV    = RMSE/avgR
+  
+  table <- data.frame(SMP, avgR, nME, nMAE, CV, COR, ME, MAE, RMSE, MAX)
+  
+  return(signif(table, 3))
+}
 
 statsFun_continuous <- function(Var, Ref){
   
