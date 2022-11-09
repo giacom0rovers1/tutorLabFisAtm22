@@ -202,30 +202,20 @@ Avvertimento in showSRID(wkt2, "PROJ"):
 
 # TODOLIST 9 nov 22
 
-# - HSAF verificare proiezione
-
-
-
-
 ? come importare link e immagini nel notebook? 
 
 per ora niente da fare con mappe interattive e animazioni gif
 
 
+- link ad help TERRA
 
-
-- writeRaster()
+- readRaster()
 
 - Scala colore unificata
-
-- Aggregazione oraria
-
-- Commmentare tra le righe di codice
-- Ordinare nomi variabili
-
-
-- esempio di pdf
 - esempio di scatterplot con stat_bin_2d() e assi log log
 
+
+- Commmentare tra le righe di codice
+- theme_bw() nelle pdf
 
 - calcolo degli scores (anche categorici stavolta)
