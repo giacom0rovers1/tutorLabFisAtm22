@@ -17,7 +17,7 @@ Spunti:
 - Val la pena usare raster package?
 
 - Nella configurazione attuale è possibile confrontare punto per punto i prodotti?
-  '-> mancano tutte le funzioni per il calcolo degli scores...
+'-> mancano tutte le funzioni per il calcolo degli scores...
 
 
 ToDo:
@@ -34,8 +34,8 @@ Note:
 
 
 
-```{r}
-# t <- "201610012100"
+
+t <- "201610012100"
 
 colnames(MyGridSAT)[84]
 colnames(MyGridPLV)[22]
@@ -46,5 +46,458 @@ colnames(MyGridERA5)[22]
 plot(MyGridGPM[,43], MyGridERA5[,22])
 plot(MyGridGPM[,43], MyGridPLV[,22], ylim=c(0,20)) # watch out for OUTLIERS!!!
 
+------------------------------------------------------------------------
+
+
+## Inizializzazione
+
+
+Per cominciare inizializziamo l'ambiente di calcolo: cancello eventuali variabili e carico i pacchetti necessari.
+
+```{r}
+# Clear the workspace
+rm(list=ls())
 ```
+
+```{r}
+# Load packages
+require(tidyverse)  # For most of the things shown here
+
+tidyverse_logo()
+```
+
+
+```{r}
+require(lubridate)  # For date-time manipulations
+# require(zoo)        # For rolling functions (moving window)
+
+# require(txtplot)
+# require(progress)
+# require(hexbin)
+# require(geosphere)
+# require(ggmap)
+```
+
+
+```{r}
+# main 
+require(terra)
+require(maptiles)
+require(leaflet)
+require(sf)
+
+# if (!require(package)) install.packages('package')
+# library(package)
+
+
+# # older
+# require(sp)
+# require(raster)
+# require(rgdal)
+# require(rgeos)
+# require(gdalUtilities)
+# require(rNOMADS)
+
+```
+
+```{r}
+# Define the working directory (in this case, the path is different depending on whether the code is executed on Linux or Windows, but just for my convenience)
+
+if(Sys.info()["sysname"]=="Linux"){
+  setwd("/home/giacom0rovers1/tutorLabFisAtm22/Esp_3/")
+}else{
+  setwd("C:/projects/tutorLabFisAtm22/Esp_3/")
+}
+```
+
+
+### Definizione dei nomi dei files e delle cartelle
+
+In questo caso `datafolder` è la cartella dentro cui si trovano le sottocartelle dei dati grezzi (ATTENZIONE: sono vari GB!), `resfolder` conterrà tutti i dati processati e i risultati, `figfolder` le figure.
+
+```{r}
+# Define the project directories (relative path)
+datafolder <- "~/Insync/giacomo.roversi2@studio.unibo.it/OneDrive Biz - Shared/Laboratorio di Fisica dell'Atmosfera/Studenti_Esp3/"
+
+HSAFfolder <- paste0(datafolder, "SAT/")
+RGfolder   <- paste0(datafolder, "PLV/")
+GPMfolder   <- paste0(datafolder, "GPM/")
+ERAfolder   <- paste0(datafolder, "ERA/")
+
+# ConGLfolder <- paste0(datafolder, "Contours Global/")
+# ConITfolder <- paste0(datafolder, "Contours IT/")
+
+figfolder  <- "figure/"
+resfolder  <- "risultati/"
+
+# Create the project directories, if missing
+if(!dir.exists(figfolder)){  dir.create(figfolder) }
+if(!dir.exists(resfolder)){  dir.create(resfolder) }
+
+```
+
+
+```{r}
+# https://hub.arcgis.com/datasets/2b93b06dc0dc4e809d3c8db5cb96ba69_0/
+
+GlobalBG <- vect(paste0(datafolder,"World_Countries_(Generalized)"))
+ItalyBG  <- GlobalBG[112]
+
+plot(ItalyBG, col="grey")
+
+
+```
+
+```{r}
+ContoursIT     <- dir(paste0(datafolder, "../Contours IT"))
+
+ItalyBGfun  <- function(ColFILL,ColEDGE)
+  for (i in 1:length(ContoursIT)) {
+    temp <- read.table(paste0(datafolder, "../Contours IT/", ContoursIT[i]))
+    polygon(x = temp[,1], y = temp[,2], lwd = 1,
+            col = ColFILL, border = ColEDGE)  }
+```
+
+
+```{r}
+map_data("world") %>% 
+  # filter(region == "Italy") %>%
+  ggplot(aes(x = long, y = lat, group = group)) +
+  geom_polygon()
+```
+
+
+
+## Import data
+
+### A) PRECIPITATION FROM SATELLITE DATA (H-SAF)
+- importare i dati HSAF e rasterizzarli
+
+
+```{r}
+# Search GRIB files ------------------------------------------------------------
+fSAT <- dir(HSAFfolder, pattern=".grb")
+fSAT <- fSAT[substr(fSAT,9,12)=="1001"]  # scelgo solo 1 giorno... non molto elegante
+length(fSAT)
+
+# Import data (Precipitation Rate [kg/m2 h] --> mm/h) ------------------------------------
+pSAT <- rast(paste0(HSAFfolder, fSAT)) * 3600 # unit correction from s to h
+
+pSAT
+
+```
+
+
+```{r}
+# Assign Date ------------------------------------------------------------------
+tSAT <- paste0(substr(paste0("SAT/",fSAT),9,16),substr(paste0("SAT/",fSAT),18,21))
+tSAT [c(1,length(tSAT))]
+
+names(pSAT) <- tSAT
+
+pSAT
+
+plot(pSAT[[1:4]])
+```
+
+Otteniamo un rater con i layers dei vari istanti nominati secondo data e ora
+
+```{r}
+selection <- c("201610011957", "201610012012", "201610012027", "201610012042",
+               "201610012057", "201610012112", "201610012127", "201610012142")
+
+pSAT2 <- terra::project(pSAT[[selection]], "+proj=longlat +datum=WGS84")
+
+names(pSAT2) <- ymd_hm(names(pSAT2))
+plot(pSAT2[[1:4]])
+
+```
+
+
+
+
+```{r}
+get_tiles(ext(pSAT2)) %>% plotRGB()
+plot(pSAT2[[6]], 
+     add=T, 
+     col=c("blue","green","yellow","orange","red"))
+
+# c(#"#FFFFFF",
+#        cm.colors(n = 9, rev = T)[6:9],
+#        rainbow(n = 16,start = 0.5, end = 0.9, s = 0.7),
+#        rep("deeppink1", 5), rep("red", 9)))
+
+
+# SISTEMARE LA COLORSCALE
+```
+Griglia comune ("MyGrid"):
+
+Creo un oggetto SpatRaster sull'Italia
+
+```{r}
+MyGrid <- rast(ncol=250, nrow=150, 
+               xmin=0, xmax=25, 
+               ymin=35, ymax=50)
+
+```
+
+
+Uso crop per tagliare pSAT2 sull'estensione della griglia sull'Italia
+
+```{r}
+pSAT3 <- crop(pSAT2, MyGrid)
+
+plot(ItalyBG, col="grey")
+plot(pSAT3[[6]], 
+     add=T, 
+     col=c("blue","green","yellow","orange","red"))
+
+```
+
+
+uso terra::project per proiettare tutti i dati sulla nuova griglia
+(come viene gestita l'interpolazione??)
+
+
+method	:
+character. Method used for estimating the new cell values of a SpatRaster. One of:
+
+near: nearest neighbor. This method is fast, and it can be the preferred method if the cell values represent classes. It is not a good choice for continuous values. This is used by default if the first layer of x is categorical.
+
+bilinear: bilinear interpolation. This is the default if the first layer of x is numeric (not categorical).
+
+cubic: cubic interpolation.
+
+cubicspline: cubic spline interpolation.
+
+```{r}
+pSAT4 <- terra::project(pSAT3, MyGrid)
+
+plot(ItalyBG, col="grey")
+plot(pSAT4[[6]], 
+     add=T, 
+     col=c("blue","green","yellow","orange","red"))
+
+```
+
+
+```{r}
+# !! I nomi degli assi rimangono fuori dal plot! Probelma del notebook probabilmente
+
+# png(filename = paste0(figfolder, "test.png"),
+#     width    = 480,
+#     height   = 322,
+#     units    = "px")
+
+plot(
+  pSAT4[[6]], 
+  main = names(pSAT4[[6]]),
+  col=c("blue","green","yellow","orange","red"),  
+  xlab   = "Longitude (°E)",
+  ylab   = "Latitude (°N)",
+  panel.first = {
+    plot(crop(GlobalBG, MyGrid), col="gray90", add=T)
+    # plot(ItalyBG, col="gray80", add=T)
+    grid()
+  }
+)
+
+# dev.off()
+
+```
+
+
+```{r}
+
+```
+
+
+
+- filtri
+??
+
+
+
+
+- analisi
+
+
+```{r}
+pSAT4[[6]]
+
+hist(pSAT4, "2016-10-01 21:12:00") # forse meglio non rinominare i livelli così?
+
+```
+
+
+
+? come importare link e immagini nel notebook? 
+
+per ora niente da fare con mappe interattive e animazioni gif
+
+
+
+
+
+
+
+
+### B) PRECIPITATION FROM PLUVIOMETRIC DATA (KRIGING INTERPOLATION)
+
+
+
+```{r}
+# Search DAT files -------------------------------------------------------------
+fPLV <- dir(RGfolder, pattern=".dat")
+fPLV <- fPLV[substr(fPLV,5,8)=="1001"]
+length(fPLV)
+
+## Assign Date ------------------------------------------------------------------
+tPLV <- substr(fPLV,1,12)
+tPLV[c(1,length(tPLV)-1)]
+
+## Import Pixel Coordinates (unstructured grid) ---------------------------------
+cPLV <- read.table(file(paste0(datafolder, "PLV_coordinates.dat")),
+                   sep = "", na.string = NA, as.is = TRUE, header = FALSE,
+                   col.names = c("x","y","lat","lon"))
+
+# trasformazioni necessarie ma ignote (non sappiamo l'origine dei dati)
+# probabilmente sono stati salvati con una diversa convenzione di lettura di matrice
+cPLV$x <- rev(cPLV$x)
+cPLV <- cPLV %>% arrange(x, y)
+
+## Import data (Precipitation Rate [mm/h]) --------------------------------------
+nROW <- 444
+nCOL <- 912
+df <- data.frame(matrix(ncol = 0, nrow = nROW*nCOL))
+for(i in 1:(length(fPLV)) ) {
+  tt <- tPLV[i]
+  df <- cbind(df, readBin(paste0(RGfolder,fPLV[i]), "numeric", nROW*nCOL, size=4))  }
+
+colnames(df) <- tPLV
+
+latlon <- tibble(id = 1:nrow(cPLV), cPLV[c("lon", "lat")])
+
+latlon <- latlon %>% filter(
+  lat >= 36,
+  lat <= 48,
+  lon >= 5,
+  lon <= 20
+)
+
+pPLV <- rasterize(cbind(latlon$lon, latlon$lat), MyGrid, values=df[latlon$id,22])
+pPLV <- clamp(pPLV, 0, values=F)
+names(pPLV) <- tPLV[22]
+pPLV
+
+plot(pPLV)
+plot(ItalyBG, add =T) #, col = "grey85")
+# ItalyBGfun(NULL, "red")
+
+```
+### C) PRECIPITATION FROM GPM DATA (SATELLITE)
+
+```{r}
+# Search IMR files (ASCII) -----------------------------------------------------
+fGPM <- dir(GPMfolder, pattern=".imr")
+fGPM <- fGPM[substr(fGPM,5,8)=="1001"]
+length(fGPM)
+
+## Import data (Precipitation Rate [mm/h]) --------------------------------------
+lGPM <- list()
+for(i in 1:(length(fGPM)) ) {
+  lGPM[[i]] <- read.table(file(paste0(GPMfolder,fGPM[i])), skip = 181, nrows = 180,
+                          sep = ",", na.string = NA, as.is = TRUE, header = FALSE)
+  lGPM[[i]]  <- as.matrix(lGPM[[i]][-1])
+}
+
+length(lGPM)
+dim(lGPM[[1]])
+
+## Import Coordinates (structured grid) -----------------------------------------
+LatGPM <- read.table(file(paste0(GPMfolder,fGPM[1])), skip = 361, nrows = 1,
+                     sep = ",", na.string = NA, as.is = TRUE, header = FALSE)
+temp   <- LatGPM[[2]]
+for(i in 3:length(LatGPM)) temp[i-1] <- LatGPM[[i]]
+LatGPM <- temp
+
+LonGPM <- read.table(file(paste0(GPMfolder,fGPM[1])), skip = 362, nrows = 1,
+                     sep = ",", na.string = NA, as.is = TRUE, header = FALSE)
+temp   <- LonGPM[[2]]
+for(i in 3:length(LonGPM)) temp[i-1] <- LonGPM[[i]]
+LonGPM <- temp
+
+c(length(LonGPM),length(LatGPM))
+
+cGPM <- 0
+for(i in LonGPM) for(j in LatGPM) cGPM <- c(cGPM,i,j)
+
+# cGPM <- t(matrix(cGPM[-1], 2, length(LonGPM)*length(LatGPM)))
+cGPM2 <- t(matrix(cGPM[-1], 2, length(LonGPM)*length(LatGPM)))
+
+## Assign Date ------------------------------------------------------------------
+tGPM <- paste0(substr(fGPM,1,8),substr(fGPM,11,15))
+tGPM [c(1,length(tGPM))]
+
+```
+
+```{r}
+
+pGPM <- rasterize(cGPM2, MyGrid, values=as.array(t(lGPM[[22]])))
+pGPM <- clamp(pGPM, 0, values=F)
+names(pGPM) <- tGPM[22]
+pGPM
+
+plot(pGPM)
+plot(ItalyBG, add =T) #, col = "grey85")
+# ItalyBGfun(NULL, "red")
+
+```
+
+
+
+### D) PRECIPITATION FROM ERA5 DATA 
+
+```{r}
+fERA5 <- dir(ERAfolder, pattern=".grib")
+length(fERA5)
+
+## Import data ------------------------------------------------------------------
+pERA5 <- rast(paste0(ERAfolder, fERA5)) * 1000
+dim(pERA5)
+
+## Assign Date ------------------------------------------------------------------
+tERA5        <- as.numeric(substr(fERA5,6,15))
+for(h in 1:dim(pERA5)[3]-1)
+  tERA5[h+1] <- tERA5[1] + h%%24 + 100*floor(h/25) + ifelse(h%%24==0,100,0)
+tERA5        <- (tERA5-100)*100
+names(pERA5) <- tERA5
+
+plot(pERA5[["201610012100"]])
+plot(ItalyBG, add =T)
+
+
+pERAf <- terra::project(pERA5, MyGrid)
+plot(pERAf[["201610012100"]])
+plot(ItalyBG, add =T)
+
+
+```
+
+
+
+
+
+
+
+
+## Confronti
+
+
+mask (per avere base spaziale comune)
+
+poi scatterplot e scores
+
+
+rasters dove i livelli sono i vari strumenti o i vari scores (vedi rainlink-tools)
 
