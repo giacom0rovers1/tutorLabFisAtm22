@@ -1,0 +1,222 @@
+rastEMR <- function(rain, datetime, border, Plot=F){
+  # Creates raster from xyz table (both Erg5 and CML)
+  rast <- rasterFromXYZ(rain, digits = 2)
+  projection(rast) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+  names(rast) <- n2s(datetime, "%Y%m%d%H%M")
+  
+  if(Plot){
+    if(!dir.exists("immagini/")){ dir.create("immagini/") }
+    if(!dir.exists("immagini/erg5/")){ dir.create("immagini/erg5/") }
+    # Plots rain map
+    png(filename = paste0("immagini/erg5/erg5_",n2s(datetime, "%Y%m%d%H%M"), ".png"),
+        width    = 480,
+        height   = 322,
+        units    = "px") # single layout
+    plot(rast, # col =  rev(heat.colors(n=255))
+         colNA  = "grey33",
+         zlim = c(0,20),
+         xlab   = "longitude (°E)",
+         ylab   = "latitude (°N)",
+         main   = 'Hourly accumulated rain (mm)')
+    mtext(n2s(datetime, "%Y-%m-%d %H:%M"))
+    lines(border)
+    dev.off()
+  }
+  return(rast)
+}
+
+
+
+col=c("#FFFFFF",
+      cm.colors(n = 9, rev = T)[6:9],
+      rainbow(n = 16,start = 0.5, end = 0.9, s = 0.7),
+      rep("deeppink1", 5), rep("red", 9))
+
+
+
+
+
+```{r}
+require(lubridate)  # For date-time manipulations
+# require(zoo)        # For rolling functions (moving window)
+
+# require(txtplot)
+# require(progress)
+# require(hexbin)
+# require(geosphere)
+# require(ggmap)
+```
+
+
+```{r}
+# main 
+require(terra)
+# require(maptiles)
+# require(leaflet)
+# require(sf)
+
+# if (!require(package)) install.packages('package')
+# library(package)
+
+
+# # older
+# require(sp)
+# require(raster)
+# require(rgdal)
+# require(rgeos)
+# require(gdalUtilities)
+# require(rNOMADS)
+
+```
+
+
+```{r}
+ContoursIT     <- dir(paste0(datafolder, "../Contours IT"))
+
+ItalyBGfun  <- function(ColFILL,ColEDGE)
+  for (i in 1:length(ContoursIT)) {
+    temp <- read.table(paste0(datafolder, "../Contours IT/", ContoursIT[i]))
+    polygon(x = temp[,1], y = temp[,2], lwd = 1,
+            col = ColFILL, border = ColEDGE)  }
+```
+
+
+```{r}
+map_data("world") %>% 
+  # filter(region == "Italy") %>%
+  ggplot(aes(x = long, y = lat, group = group)) +
+  geom_polygon()
+```
+
+Otteniamo un rater con i layers dei vari istanti nominati secondo data e ora
+
+```{r}
+selection <- c("201610012012", "201610012027", 
+               "201610012042", "201610012057" )
+
+HSAF.raster2 <- terra::project(HSAF.raster[[selection]], "+proj=longlat +datum=WGS84")
+
+names(HSAF.raster2) <- names(HSAF.raster2)
+
+HSAF.raster2
+plot(HSAF.raster2[[1:4]])
+
+```
+
+
+
+
+```{r}
+get_tiles(ext(HSAF.raster2)) %>% plotRGB()
+plot(HSAF.raster2[["201610012057"]], 
+     add=T, 
+     col=c("blue","green","yellow","orange","red"))
+
+# c(#"#FFFFFF",
+#        cm.colors(n = 9, rev = T)[6:9],
+#        rainbow(n = 16,start = 0.5, end = 0.9, s = 0.7),
+#        rep("deeppink1", 5), rep("red", 9)))
+
+
+# SISTEMARE LA COLORSCALE
+```
+
+
+
+
+Uso crop per tagliare HSAF.raster2 sull'estensione della griglia sull'Italia
+
+```{r}
+HSAF.raster3 <- crop(HSAF.raster2, MyGrid)
+
+plot(ItalyBG, col="grey")
+plot(HSAF.raster3[["201610012057"]], 
+     add=T, 
+     col=c("blue","green","yellow","orange","red"))
+
+```
+
+```{r}
+HSAF.raster3b <- terra::project(HSAF.raster[["201610012057"]], MyGrid)
+
+plot(ItalyBG, col="grey")
+plot(HSAF.raster3b[["201610012057"]], 
+     add=T, 
+     col=c("blue","green","yellow","orange","red"))
+
+```
+
+
+
+
+uso terra::project per proiettare tutti i dati sulla nuova griglia
+(come viene gestita l'interpolazione??)
+
+
+method	:
+character. Method used for estimating the new cell values of a SpatRaster. One of:
+
+near: nearest neighbor. This method is fast, and it can be the preferred method if the cell values represent classes. It is not a good choice for continuous values. This is used by default if the first layer of x is categorical.
+
+bilinear: bilinear interpolation. This is the default if the first layer of x is numeric (not categorical).
+
+cubic: cubic interpolation.
+
+cubicspline: cubic spline interpolation.
+
+```{r}
+HSAF.raster4 <- terra::project(HSAF.raster3, MyGrid)
+
+plot(ItalyBG, col="grey")
+plot(HSAF.raster4[["201610012057"]], 
+     add=T, 
+     col=c("blue","green","yellow","orange","red"))
+
+```
+
+
+
+Avvertimento in showSRID(wkt2, "PROJ"):
+  Discarded datum unnamed in Proj4 definition
+Avvertimento in getProjectionRef(x, OVERRIDE_PROJ_DATUM_WITH_TOWGS84 = OVERRIDE_PROJ_DATUM_WITH_TOWGS84, :
+  Discarded ellps Spheroid imported from GRIB file in Proj4 definition: +proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +a=6378140 +rf=298.252981061492 +units=m +no_defs
+Avvertimento in getProjectionRef(x, OVERRIDE_PROJ_DATUM_WITH_TOWGS84 = OVERRIDE_PROJ_DATUM_WITH_TOWGS84, :
+  Discarded datum unnamed in Proj4 definition: +proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +a=6378140 +rf=298.252981061492 +units=m +no_defs
+Avvertimento in showSRID(wkt2, "PROJ"):
+  Discarded ellps Spheroid imported from GRIB file in Proj4 definition: +proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +a=6378140 +rf=298.252981061492 +units=m +no_defs +type=crs
+Avvertimento in showSRID(wkt2, "PROJ"):
+  Discarded datum unnamed in Proj4 definition
+
+
+
+
+
+# TODOLIST 9 nov 22
+
+# - HSAF verificare proiezione
+
+
+
+
+? come importare link e immagini nel notebook? 
+
+per ora niente da fare con mappe interattive e animazioni gif
+
+
+
+
+- writeRaster()
+
+- Scala colore unificata
+
+- Aggregazione oraria
+
+- Commmentare tra le righe di codice
+- Ordinare nomi variabili
+
+
+- esempio di pdf
+- esempio di scatterplot con stat_bin_2d() e assi log log
+
+
+- calcolo degli scores (anche categorici stavolta)
