@@ -1,14 +1,17 @@
-# ---------------------------------------------------------------------------- #
-#               Laboratorio di Fisica dell'Atmosfera - FST UniBo               #
-#                      Data processing per l'esperienza 3                      #
-#                 Giacomo Roversi (giacomo.roversi3@unibo.it)                  #
-#                             10 novembre 2022                                 #
-# ---------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+#              Laboratorio di Fisica dell'Atmosfera - FST UniBo               #
+#                     Data processing per l'esperienza 3                      #
+#                 Giacomo Roversi (giacomo.roversi3@unibo.it)                 #
+#                             10 novembre 2022                                #
+# --------------------------------------------------------------------------- #
 
 # Clear the workspace 
 rm(list=ls())
 
-# ======================== CONFIG (parte da modificare) ========================
+# Timer
+StartTime <- proc.time()
+
+# ======================= CONFIG (parte da modificare) ========================
 
 # Define base folder paths
 rootfolder <- "/home/giacom0rovers1/tutorLabFisAtm22/Esp_3/"
@@ -19,9 +22,9 @@ sel_START <- "201610010100"
 sel_END   <- "201610102300"
 
 # Select properties of the common grid ("MyGrid"):
-MyGrid <- rast(ncol=250, nrow=150, 
-               xmin=0, xmax=25, 
-               ymin=35, ymax=50)
+MyGrid_res = 0.1
+MyGrid_extLON = c(0, 25)
+MyGrid_extLAT = c(35, 50)
 
 # Set the unic conversion coefficients
 CorrectionFactor_HSAF = 3600 # kg/m2*s --> mm/h
@@ -32,9 +35,10 @@ packages <- c("tidyverse",
               "lubridate",
               "zoo",
               "terra",
-              "rgdal")
+              "rgdal",
+              "progress")
 
-# ============================== FUNCTIONS =====================================
+# ============================== FUNCTIONS ====================================
 
 hourlyMean <- function(IN.raster, sel.times){
   #' Aggregates time layers of a SpatRaster object through an hourly mean.
@@ -73,7 +77,7 @@ hourlyMean <- function(IN.raster, sel.times){
 }
 
 
-# ================================= INIT =======================================
+# ================================= INIT ======================================
 
 # Install/load packages
 for(pkg in packages){
@@ -107,11 +111,20 @@ sel.times <- format(seq(ymd_hm(sel_START), ymd_hm(sel_END), by="1 hour"), "%Y%m%
 GlobalBG <- vect(paste0(datafolder,"World_Countries_(Generalized)"))
 ItalyBG  <- GlobalBG[112]
 
+# Create the common grid
+MyGrid <- rast(ncol=diff(MyGrid_extLON)/MyGrid_res, 
+               xmin=MyGrid_extLON[1], xmax=MyGrid_extLON[2], 
+               nrow=diff(MyGrid_extLAT)/MyGrid_res, 
+               ymin=MyGrid_extLAT[1], ymax=MyGrid_extLAT[2])
 
-# ================================== RUN =======================================
+# Format for progress bar inside rasterize for loops
+barf <- "  :what [:bar] :current/:total (:percent) eta: :eta"
+
+# ================================== RUN ======================================
 
 
-# ERA5  -----------------------------------------------------------------------
+# ERA5 ------------------------------------------------------------------------
+cat("ERA5")
 
 ## Read file names ------------------------------------------------------------
 ERA5.files <- dir(ERA5.folder, pattern=".grib")
@@ -140,22 +153,36 @@ ERA5.final <- mask(ERA5.MyGrid[[sel.times]], ItalyBG)
 ## Save GeoTiff file ----------------------------------------------------------
 writeRaster(ERA5.final, paste0(resfolder, "ERA5_final.tif"), overwrite=TRUE )
 
-## Clear memory  --------------------------------------------------------------
+## Clear memory  ---------------------------------------------------------------
 rm(ERA5.raster, ERA5.MyGrid, ERA5.final)
 
 
 
 
 # H-SAF -----------------------------------------------------------------------
+cat("H-SAF")
 
 ## Search GRIB files ----------------------------------------------------------
 HSAF.files <- dir(HSAF.folder, pattern=".grb")
 
+## Assign Date ----------------------------------------------------------------
+HSAF.times <- paste0(substr(HSAF.files,5,12),substr(HSAF.files,14,17))
+
+## Select only files inside the selected time interval -------------------------
+sel_idx <- which(ymd_hm(HSAF.times) >= ymd_hm(sel_START) & 
+                   ymd_hm(HSAF.times) <= ymd_hm(sel_END))
+HSAF.files <- HSAF.files[sel_idx]
+HSAF.times <- HSAF.times[sel_idx]
+
 ## Import data (Precipitation Rate [kg/m2 s]) ---------------------------------
 HSAF.list <- list()
+bar <- progress_bar$new(format = barf, 
+                        total = length(HSAF.files))
+
 for(i in 1:length(HSAF.files)) {
   HSAF.list[[i]] <- rgdal::readGDAL(paste0(HSAF.folder,HSAF.files[i]), 
                                     silent = TRUE)
+  bar$tick(tokens = list(what = "reading data"))
 }
 
 ## Import Coordinates (unstructured grid) -------------------------------------
@@ -165,16 +192,17 @@ HSAF.coordinates <- read.table(file(paste0(datafolder,"SAT_coordinates.dat")),
                                as.is = TRUE, 
                                header = FALSE)
 
-## Assign Date ----------------------------------------------------------------
-HSAF.times <- paste0(substr(HSAF.files,5,12),substr(HSAF.files,14,17))
-
 ## Merge Data -----------------------------------------------------------------
 HSAF.df <- HSAF.coordinates[1710000:1,]
+bar <- progress_bar$new(format = barf, 
+                        total = length(HSAF.times))
+
 for(i in 1:length(HSAF.times)){
   HSAF.df <- cbind(HSAF.df, 
                    matrix(HSAF.list[[i]][[1]], dim(HSAF.list[[1]])[1], 1))
-  colnames(HSAF.df) <- c("Lon", "Lat", HSAF.times)
+  bar$tick(tokens = list(what = "merging data"))
 } 
+colnames(HSAF.df) <- c("Lon", "Lat", HSAF.times)
 
 ## Restrict domain to Mediterranean area (bulk) -------------------------------
 HSAF.df_ITA <- HSAF.df %>% filter(
@@ -188,12 +216,16 @@ HSAF.df_ITA <- HSAF.df %>% filter(
 HSAF.raster <- rast(MyGrid)
 
 ## Rasterize data over SpatRaster object (layr by layer) ----------------------
+bar <- progress_bar$new(format = barf, 
+                        total = length(HSAF.times))
+
 for(i in 1:length(HSAF.times)){
   HSAF.raster <- c(HSAF.raster, 
                    rasterize(cbind(HSAF.df_ITA$Lon, HSAF.df_ITA$Lat), 
                              MyGrid, 
                              values=as.array(HSAF.df_ITA[[HSAF.times[i]]])
                    ) * CorrectionFactor_HSAF)
+  bar$tick(tokens = list(what = "rasterize"))
 }
 
 ## Set layer names ------------------------------------------------------------
@@ -212,18 +244,32 @@ HSAF.final  <- mask(HSAF.hourly, ItalyBG)
 writeRaster(HSAF.final, paste0(resfolder, "HSAF_final.tif"), overwrite=TRUE )
 
 ## Clear memory  --------------------------------------------------------------
-rm(HSAF.df, HSAF.raster, ERA5.hourly, HSAF.final)
+rm(HSAF.df, HSAF.list, HSAF.raster, ERA5.hourly, HSAF.final)
 
 
 
 
 # GPM-IMERG -------------------------------------------------------------------
+cat("GPM-IMERG")
 
 ## Search IMR files (ASCII) ---------------------------------------------------
 GPM.files <- dir(GPM.folder, pattern=".imr")
 
+## Assign Date ----------------------------------------------------------------
+GPM.times <- paste0(substr(GPM.files,1,8),substr(GPM.files,11,14))
+names(GPM.list) <- GPM.times
+
+## Select only files inside the selected time interval -------------------------
+sel_idx <- which(ymd_hm(GPM.times) >= ymd_hm(sel_START) & 
+                   ymd_hm(GPM.times) <= ymd_hm(sel_END))
+GPM.files <- GPM.files[sel_idx]
+GPM.times <- GPM.times[sel_idx]
+
 ## Import data (Precipitation Rate [mm/h]) ------------------------------------
 GPM.list <- list()
+bar <- progress_bar$new(format = barf, 
+                        total = length(GPM.files))
+
 for(i in 1:(length(GPM.files)) ) {
   GPM.list[[i]] <- read.table(file(paste0(GPM.folder,GPM.files[i])), 
                               skip = 181, 
@@ -234,6 +280,7 @@ for(i in 1:(length(GPM.files)) ) {
                               header = FALSE)
   
   GPM.list[[i]]  <- as.matrix(GPM.list[[i]][-1])
+  bar$tick(tokens = list(what = "reading data"))
 }
 
 ## Import Coordinates (structured grid) ---------------------------------------
@@ -263,19 +310,19 @@ GPM.coordinates <- 0
 for(i in LonGPM) for(j in LatGPM) GPM.coordinates <- c(GPM.coordinates,i,j)
 GPM.coordinates <- t(matrix(GPM.coordinates[-1], 2, length(LonGPM)*length(LatGPM)))
 
-## Assign Date ----------------------------------------------------------------
-GPM.times <- paste0(substr(GPM.files,1,8),substr(GPM.files,11,14))
-names(GPM.list) <- GPM.times
-
 ## Create SpatRaster object from MyGrid ---------------------------------------
 GPM.raster <- rast(MyGrid)
 
 ## Rasterize data over SpatRaster object (layr by layer) ----------------------
+bar <- progress_bar$new(format = barf,
+                        total = length(GPM.times))
+
 for(i in 1:length(GPM.times)){
   GPM.raster <- c(GPM.raster, 
                   rasterize(GPM.coordinates, 
                             MyGrid, 
                             values=as.array(t(GPM.list[[GPM.times[i]]]))))
+  bar$tick(tokens = list(what = "rasterize"))
 }
 ## Set layer names ------------------------------------------------------------
 names(GPM.raster) <- GPM.times
@@ -298,12 +345,19 @@ rm(GPM.list, GPM.raster, GPM.hourly, GPM.final, GPM.coordinates, LatGPM, LonGPM)
 
 
 # RAIN GAUGES -----------------------------------------------------------------
+cat("RainGauges")
 
 ## Search DAT files -----------------------------------------------------------
 RG.files <- dir(RG.folder, pattern=".dat")
 
 ## Assign Date ----------------------------------------------------------------
 RG.times <- substr(RG.files,1,12)
+
+## Select only files inside the selected time interval -------------------------
+sel_idx <- which(ymd_hm(RG.times) >= ymd_hm(sel_START) & 
+                   ymd_hm(RG.times) <= ymd_hm(sel_END))
+RG.files <- RG.files[sel_idx]
+RG.times <- RG.times[sel_idx]
 
 ## Import Pixel Coordinates (unstructured grid) -------------------------------
 RG.coordinates <- read.table(file(paste0(datafolder, "PLV_coordinates.dat")),
@@ -318,12 +372,17 @@ RG.coordinates <- RG.coordinates %>% arrange(x, y)
 nROW <- 444
 nCOL <- 912
 RG.df <- data.frame(matrix(ncol = 0, nrow = nROW*nCOL))
+
+bar <- progress_bar$new(format = barf, 
+                        total = length(RG.files))
+
 for(i in 1:(length(RG.files)) ) {
   tt <- RG.times[i]
   RG.df <- cbind(RG.df, readBin(paste0(RG.folder,RG.files[i]), 
                                 "numeric", 
                                 nROW*nCOL, 
                                 size=4))
+  bar$tick(tokens = list(what = "reading data"))
 }
 colnames(RG.df) <- RG.times
 
@@ -342,11 +401,15 @@ latlon <- latlon %>% filter(
 RG.raster <- rast(MyGrid)
 
 ## Rasterize data over SpatRaster object (layr by layer) ----------------------
+bar <- progress_bar$new(format = barf,
+                        total = length(RG.times))
+
 for(i in 1:length(RG.times)){
   RG.raster <- c(RG.raster, 
                  rasterize(cbind(latlon$lon, latlon$lat), 
                            MyGrid, 
                            values=RG.df[latlon$id,22]))
+  bar$tick(tokens = list(what = "rasterize"))
 }
 
 ## Set layer names ------------------------------------------------------------
@@ -365,7 +428,5 @@ writeRaster(RG.final, paste0(resfolder, "RG_final.tif"), overwrite=TRUE )
 rm(RG.df, RG.raster, RG.final, RG.coordinates, latlon)
 
 
-# add timer (see rainlink)
-# add progressbar?
-
-# End.
+# All done --------------------------------------------------------------------
+cat(sprintf("All done. (%.1f seconds)\n",round((proc.time()-StartTime)[3],digits=1)))
