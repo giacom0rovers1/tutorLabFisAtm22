@@ -14,8 +14,11 @@ StartTime <- proc.time()
 # ======================= CONFIG (parte da modificare) ========================
 
 # Define base folder paths
-rootfolder <- "/home/giacom0rovers1/tutorLabFisAtm22/Esp_3/"
-datafolder <- "~/Insync/giacomo.roversi2@studio.unibo.it/OneDrive Biz - Shared/Laboratorio di Fisica dell'Atmosfera/Studenti_Esp3/"
+# rootfolder <- "/home/giacom0rovers1/tutorLabFisAtm22/Esp_3/"
+# datafolder <- "~/Insync/giacomo.roversi2@studio.unibo.it/OneDrive Biz - Shared/Laboratorio di Fisica dell'Atmosfera/Studenti_Esp3/"
+
+rootfolder <- "C:/projects/tutorLabFisAtm22/Esp_3/"
+datafolder <- "C:/Users/grove/OneDrive - Alma Mater Studiorum Università di Bologna/Laboratorio di Fisica dell'Atmosfera/Studenti_Esp3/"
 
 # Define time interval (between 1 October and 30 November 2016)
 sel_START <- "201610010000"
