@@ -49,9 +49,11 @@ tidyverse_logo()
 # Define the working directory (in this case, the path is different depending on whether the code is executed on Linux or Windows, but just for my convenience)
 
 if(Sys.info()["sysname"]=="Linux"){
-  setwd("/home/giacom0rovers1/tutorLabFisAtm22/Esp_3/")
+  rootfolder <- "/home/giacom0rovers1/tutorLabFisAtm22/Esp_3/"
+  datafolder <- "~/Insync/giacomo.roversi2@studio.unibo.it/OneDrive Biz - Shared/Laboratorio di Fisica dell'Atmosfera/Studenti_Esp3/"
 }else{
-  setwd("C:/projects/tutorLabFisAtm22/Esp_3/")
+  rootfolder <- "C:/projects/tutorLabFisAtm22/Esp_3/"
+  datafolder <- "C:/Users/grove/OneDrive - Alma Mater Studiorum Università di Bologna/Laboratorio di Fisica dell'Atmosfera/Studenti_Esp3/"
 }
 ```
 
@@ -62,7 +64,7 @@ In questo caso `datafolder` è la cartella dentro cui si trovano le sottocartell
 
 ```{r}
 # Define the project directories (relative path)
-datafolder <- "~/Insync/giacomo.roversi2@studio.unibo.it/OneDrive Biz - Shared/Laboratorio di Fisica dell'Atmosfera/Studenti_Esp3/"
+setwd(rootfolder)
 
 HSAF.folder <- paste0(datafolder, "SAT/")
 RG.folder   <- paste0(datafolder, "PLV/")
