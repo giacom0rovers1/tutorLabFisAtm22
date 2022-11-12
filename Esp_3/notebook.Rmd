@@ -11,11 +11,10 @@ Laboratorio di Fisica dell'Atmosfera A.A. 2022/23
 
 ------------------------------------------------------------------------
 
+In questa esperienza lavoriamo con dati geo-riferiti ("geo-referenced"), ovvero campi di variabili geofisiche distribuiti su aree del globo terrestre. Sfrutteremo dei tools appositi (nello specifico il pacchetto `terra` e le funzioni della libreria `rgdal`) per gestire agevolmente le coordinate sferiche e i sistemi di riferimento geografici.
 
 ## Inizializzazione
-
-
-Per cominciare inizializziamo l'ambiente di calcolo: cancello eventuali variabili e carico i pacchetti necessari.
+Per cominciare inizializziamo l'ambiente di calcolo: cancello eventuali variabili e carico i pacchetti necessari. Posso indicare i nomi dei pacchetti in un vettore di stringhe e verificare in automatico se sono già presenti nel sistema ed installarli in caso negativo. Per tutti deve sempre avvenire la chiamata `library()` (altre volte abbiamo usato `require()` con la stessa funzione), altrimenti non vengono caricati nell'ambiente di lavoro.
 
 ```{r}
 # Clear the workspace
@@ -23,28 +22,28 @@ rm(list=ls())
 ```
 
 ```{r}
-# Load packages
+# A new method to load packages: 
+# If they are not available in the system, they are automatically installed.
 
 packages <- c(
   "tidyverse",
   "lubridate",
   "zoo",
   "terra",
-  "rgdal"
+  "rgdal",
+  "progress"
 )
 
 for(pkg in packages){
   
-  if(!require(pkg, character.only = T)){
-    install.packages(pkg)
-  } 
+  if(!require(pkg, character.only = T)){install.packages(pkg)} 
   
   library(pkg, character.only = T)
 }
 
 tidyverse_logo()
 ```
-
+Al solito, imposto la directory principale di lavoro in base alla struttura della mia cartella personale (parte da modificare in base al proprio sistema). Il blocco `if()` mi permette di indicare due indirizzi diversi in base al sistema su cui lancio l'esecuzione (Windows o Linux).
 ```{r}
 # Define the working directory (in this case, the path is different depending on whether the code is executed on Linux or Windows, but just for my convenience)
 
@@ -60,7 +59,7 @@ if(Sys.info()["sysname"]=="Linux"){
 
 ### Definizione dei nomi dei files e delle cartelle
 
-In questo caso `datafolder` è la cartella dentro cui si trovano le sottocartelle dei dati grezzi (ATTENZIONE: sono vari GB!), `resfolder` conterrà tutti i dati processati e i risultati, `figfolder` le figure.
+In questo caso `datafolder` è la cartella dentro cui si trovano le sottocartelle dei dati grezzi (ATTENZIONE: occupano vari GB!), `resfolder` conterrà tutti i dati processati e i risultati, `figfolder` le figure. Per come è configurato ora, il codice genera queste ultime dentro la working directory, non dentro `datafolder`. Questo perché magari i dati si trovano su una risorsa esterna (un HDD o un cloud) e perché in ogni caso gli outputs pesano molto poco rispetto ai dati grezzi.
 
 ```{r}
 # Define the project directories (relative path)
@@ -80,7 +79,12 @@ if(!dir.exists(resfolder)){  dir.create(resfolder) }
 
 ```
 
+## Strutture di dati
+Gli oggetti di dati georiferiti nel pacchetto `terra` possono avere una struttura vettoriale (punti, segmenti, poligoni) o  matriciale (rasters, ovvero campi grigliati).
 
+Le strutture predisposte per questi tipi di dati sono rispettivamente `SpatVector` e `SpatRaster` (dove "spat" sta chiaramente per "spatial").
+
+### Confini nazionali
 ```{r}
 # https://hub.arcgis.com/datasets/2b93b06dc0dc4e809d3c8db5cb96ba69_0/
 
@@ -95,6 +99,7 @@ plot(ItalyBG, col="grey")
 Fornisce sia i confini da plottare, sia un dominio con cui mascherare i raster (`mask` esegue il ritaglio che segue i bordi, mentre `crop` prende la bounding box)
 
 
+Alcuni prodotti sono da convertire in mm/h perché sono forniti in altre unità di misura.
 
 ```{r}
 CorrectionFactor_HSAF = 3600 # kg/m2*s --> mm/h
@@ -103,14 +108,20 @@ CorrectionFactor_ERA5 = 1000 # m/h --> mm/h
 
 
 
-## Griglia comune ("MyGrid"):
+### Griglia comune ("MyGrid"):
 
 Creo un oggetto SpatRaster sull'Italia
 
 ```{r}
-MyGrid <- rast(ncol=250, nrow=150, 
-               xmin=0, xmax=25, 
-               ymin=35, ymax=50)
+# Select properties of the common grid ("MyGrid"):
+MyGrid_res = 0.1
+MyGrid_extLON = c(0, 25)
+MyGrid_extLAT = c(35, 50)
+
+MyGrid <- rast(ncol=diff(MyGrid_extLON)/MyGrid_res, 
+               xmin=MyGrid_extLON[1], xmax=MyGrid_extLON[2], 
+               nrow=diff(MyGrid_extLAT)/MyGrid_res, 
+               ymin=MyGrid_extLAT[1], ymax=MyGrid_extLAT[2])
 
 MyGrid
 
@@ -120,37 +131,6 @@ Situazione e obiettivo
 
 Input: 4 risoluzioni spaziali e temporali diverse
 Output: stessa griglia, cumulate orarie (o mm/h medi orari)
-
-TODO implementare + colors ### **NEW** Funzione per plot mappe
-
-```{r}
-plotMap <- function(raster, layerNames){
-  colorscale <- c("blue","green","yellow","orange","red")
-  
-  for(lname in layerNames){
-    rastLayer <- raster[[lname]]
-    
-    plot(
-      clamp(rastLayer, 0.2, values=F), 
-      main = ymd_hm(lname),
-      col  = colorscale,  
-      xlab = "Longitude (°E)",
-      ylab = "Latitude (°N)",
-      panel.first = {
-        plot(
-          crop(GlobalBG, MyGrid), 
-          col="gray90", 
-          add=T
-        )
-        grid()
-      }
-    )
-  }
-}
-
-
-```
-
 
 ## Import data
 
@@ -434,7 +414,9 @@ latlon <- latlon %>% filter(
 
 RG.raster <- rast(MyGrid)
 for(i in 1:length(RG.times)){
-  RG.raster <- c(RG.raster, rasterize(cbind(latlon$lon, latlon$lat), MyGrid, values=RG.df[latlon$id,22]))
+  RG.raster <- c(RG.raster, rasterize(cbind(latlon$lon, latlon$lat), 
+                                      MyGrid, 
+                                      values=RG.df[latlon$id,i]))
 }
 names(RG.raster) <- RG.times
 ```
@@ -472,29 +454,49 @@ plot(mask(ERA5.MyGrid[["201610012100"]], ItalyBG))
 ## **NEW** Funzione media oraria
 
 ```{r}
-hourlyMean <- function(IN.raster, IN.times, sel.times){
+hourlyMean <- function(IN.raster, sel.times){
+  #' Aggregates time layers of a SpatRaster object through an hourly mean.
+  #' @param IN.raster SpatRaster object with multiple layers. Layer names should be in the "%Y%m%d%H%M" format.
+  #' @param sel.times Array of strings of the desired time intervals (hours). This should also be in the "%Y%m%d%H%M" format.
+  #' @return Output SpatRaster has the same properties of the input raster and layers corresponding to sel.times
+  #' @author Giacomo Roversi
   
-  stopifnot(nlyr(IN.raster)==length(IN.times))
+  # Read raster time intervals
+  IN.times <- names(IN.raster)
   
-  OUT.raster <- rast(MyGrid)
+  # Create empty objects
+  OUT.raster <- rast(IN.raster)
   OUT.times  <- character() 
   
-  for(time in sel.times){
-    # print(time)
+  # Progress bar
+  bar <- progress_bar$new(format = "  :what [:bar] :current/:total (:percent) eta: :eta | :elapsedfull",
+                          total = length(sel.times),
+                          clear = FALSE)
+  
+  # Loop through requested time intervals
+  for(tim in sel.times){
     
-    interval <- format(seq(ymd_hm(time) - hours(1) + minutes(1), 
-                           ymd_hm(time), 
+    # Create time strings for every minute in the selected hour
+    interval <- format(seq(ymd_hm(tim) - hours(1) + minutes(1), 
+                           ymd_hm(tim), 
                            by="1 min"), "%Y%m%d%H%M")
     
+    # Select data rows within the selected hour
     idx <- which(IN.times %in% interval)
     
-    OUT.raster <- c(OUT.raster, mean(IN.raster[[idx]]))
-    OUT.times <- c(OUT.times, time)
+    if(length(idx) > 0){
+      # Add the mean of the selected data to the output raster (new layer)
+      OUT.raster <- c(OUT.raster, mean(IN.raster[[idx]]))
+      OUT.times  <- c(OUT.times, tim)
+    }
+    
+    bar$tick(tokens = list(what = "hourly mean "))
   }
   
+  # Set layer names
   names(OUT.raster) <- OUT.times
-  stopifnot(nlyr(OUT.raster)==length(OUT.times))
   
+  # Output
   return(OUT.raster) 
 }
 
@@ -502,12 +504,16 @@ hourlyMean <- function(IN.raster, IN.times, sel.times){
 ```
 
 ## **NEW** Selezione di un intervallo comune (raster orari)
+ seleziono il primo giorno (light per NOTEBOOK)
+
 ```{r}
-# seleziono il primo giorno (light per NOTEBOOK)
-sel_START <- "201610010100"
+# Define time interval (between 1 October and 30 November 2016)
+sel_START <- "201610010000"
 sel_END   <- "201610012300"
 
-sel.times <- format(seq(ymd_hm(sel_START), ymd_hm(sel_END), by="1 hour"), "%Y%m%d%H%M")
+sel.times <- format(seq(ymd_hm(sel_START)+hours(1), 
+                        ymd_hm(sel_END), 
+                        by="1 hour"), "%Y%m%d%H%M")
 
 ```
 
@@ -527,11 +533,11 @@ RG.final
 ## **NEW** Aggregazione: medie orarie
 
 ```{r}
-GPM.hourly <- hourlyMean(GPM.raster, GPM.times, sel.times)
+GPM.hourly <- hourlyMean(GPM.raster, sel.times)
 GPM.final  <- mask(GPM.hourly, ItalyBG)
 GPM.final
 
-HSAF.hourly <- hourlyMean(HSAF.raster, HSAF.times, sel.times)
+HSAF.hourly <- hourlyMean(HSAF.raster, sel.times)
 HSAF.final  <- mask(HSAF.hourly, ItalyBG)
 HSAF.final
 
@@ -541,10 +547,10 @@ HSAF.final
 
 ```{r}
 par(mfrow=c(2,2))
-plot(ERA5.final[["201610012100"]])
-plot(RG.final[["201610012100"]])
-plot(HSAF.final[["201610012100"]])
-plot(GPM.final[["201610012100"]])
+plot(ERA5.final[["201610012100"]], main = "ERA5")
+plot(RG.final[["201610012100"]], main = "RainGauges")
+plot(HSAF.final[["201610012100"]], main = "H-SAF")
+plot(GPM.final[["201610012100"]], main = "GPM-IMERG")
 
 ```
 
@@ -558,7 +564,44 @@ writeRaster(HSAF.final, paste0(resfolder, "HSAF_light.tif"), overwrite=TRUE )
 ```
 
 
-Per leggere bisogna usare poi: `readRaster()`
+
+Per leggere bisogna usare poi: `rast("nomefile")`
+
+
+## plot mappe più curato
+
+
+TODO implementare + colors ### **NEW** Funzione per plot mappe
+
+```{r}
+plotMap <- function(raster, layerNames){
+  colorscale <- c("blue","green","yellow","orange","red")
+  
+  for(lname in layerNames){
+    rastLayer <- raster[[lname]]
+    
+    plot(
+      clamp(rastLayer, 0.2, values=F), 
+      main = ymd_hm(lname),
+      col  = colorscale,  
+      xlab = "Longitude (°E)",
+      ylab = "Latitude (°N)",
+      panel.first = {
+        plot(
+          crop(GlobalBG, MyGrid), 
+          col="gray90", 
+          add=T
+        )
+        grid()
+      }
+    )
+  }
+}
+
+
+```
+
+
 
 
 

@@ -60,7 +60,7 @@ hourlyMean <- function(IN.raster, sel.times){
   OUT.times  <- character() 
   
   # Progress bar
-  bar <- progress_bar$new(format = "  :what [:bar] :current/:total (:percent) eta: :eta",
+  bar <- progress_bar$new(format = "  :what [:bar] :current/:total (:percent) eta: :eta | :elapsedfull",
                           total = length(sel.times),
                           clear = FALSE)
   
@@ -133,7 +133,7 @@ MyGrid <- rast(ncol=diff(MyGrid_extLON)/MyGrid_res,
                ymin=MyGrid_extLAT[1], ymax=MyGrid_extLAT[2])
 
 # Format for progress bar inside rasterize for loops
-barf <- "  :what [:bar] :current/:total (:percent) eta: :eta"
+barf <- "  :what [:bar] :current/:total (:percent) eta: :eta | :elapsedfull"
 
 # ================================== RUN ======================================
 
@@ -418,7 +418,7 @@ for(i in 1:length(RG.times)){
   RG.raster <- c(RG.raster, 
                  rasterize(cbind(latlon$lon, latlon$lat), 
                            MyGrid, 
-                           values=RG.df[latlon$id,22]))
+                           values=RG.df[latlon$id,i]))
   bar$tick(tokens = list(what = "rasterize   "))
 }
 
