@@ -264,19 +264,6 @@ plot(GlobalBG, add=T)
 
 
 
-```{r}
-# !! I nomi degli assi rimangono fuori dal plot! Probelma del notebook probabilmente
-
-png(filename = paste0(figfolder, "test.png"),
-    width    = 480,
-    height   = 322,
-    units    = "px")
-
-plotMap(HSAF.raster, "201610012057")
-
-dev.off()
-
-```
 
 
 - Analisi
@@ -604,6 +591,19 @@ plotMap <- function(raster, layerNames){
 
 
 
+```{r}
+# !! I nomi degli assi rimangono fuori dal plot! Probelma del notebook probabilmente
+
+png(filename = paste0(figfolder, "test.png"),
+    width    = 480,
+    height   = 322,
+    units    = "px")
+
+plotMap(HSAF.raster, "201610012057")
+
+dev.off()
+
+```
 
 
 
