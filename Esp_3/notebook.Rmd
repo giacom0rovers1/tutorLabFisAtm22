@@ -11,15 +11,26 @@ Laboratorio di Fisica dell'Atmosfera A.A. 2022/23
 
 ------------------------------------------------------------------------
 
-In questa esperienza lavoriamo con dati geo-riferiti ("geo-referenced"), ovvero campi di variabili geofisiche distribuiti su aree del globo terrestre. Sfrutteremo dei tools appositi (nello specifico il pacchetto `terra` e le funzioni della libreria `rgdal`) per gestire agevolmente le coordinate sferiche e i sistemi di riferimento geografici.
+## Introduzione
+
+In questa esperienza lavoriamo con **dati geo-riferiti** ("geo-referenced" o "spatial"), ovvero campi di variabili geofisiche distribuiti su aree del globo terrestre. Andremo a confrontare i campi di stime di precipitazione derivanti da quattro diverse tipologie di prodotti, ognuno con una sua risoluzione spaziale e temporale.
+
+Sfrutteremo dei tools appositi: il pacchetto `terra` e le funzioni della libreria `rgdal`, per gestire agevolmente le coordinate sferiche e i sistemi di riferimento geografici. Per chi avesse avuto l'occasione di lavorare con dati geo-riferiti in R in precedenza, `terra` è l'evoluzione del pacchetto `raster` e ne mantiene invariati quasi tutti i comandi.
+
+Per approfondire l'analisi di dati spaziali con R consiglio di consultare [Spatial Data Science with R and "terra"](https://rspatial.org/terra/index.html)
 
 ## Inizializzazione
-Per cominciare inizializziamo l'ambiente di calcolo: cancello eventuali variabili e carico i pacchetti necessari. Posso indicare i nomi dei pacchetti in un vettore di stringhe e verificare in automatico se sono già presenti nel sistema ed installarli in caso negativo. Per tutti deve sempre avvenire la chiamata `library()` (altre volte abbiamo usato `require()` con la stessa funzione), altrimenti non vengono caricati nell'ambiente di lavoro.
+
+Per cominciare inizializziamo l'ambiente di calcolo: cancello eventuali variabili...
 
 ```{r}
 # Clear the workspace
 rm(list=ls())
 ```
+
+... e carico i pacchetti necessari.
+
+Posso indicare i nomi dei pacchetti in un **vettore di stringhe** e verificare in automatico se sono già presenti nel sistema ed installarli in caso negativo. Per tutti deve sempre avvenire la chiamata `library()` (altre volte abbiamo usato `require()` con la stessa funzione), altrimenti non vengono caricati nell'ambiente di lavoro.
 
 ```{r}
 # A new method to load packages: 
@@ -36,14 +47,18 @@ packages <- c(
 
 for(pkg in packages){
   
-  if(!require(pkg, character.only = T)){install.packages(pkg)} 
+  if(!require(pkg, character.only=T)){install.packages(pkg)} 
   
-  library(pkg, character.only = T)
+  library(pkg, character.only=T)
 }
 
 tidyverse_logo()
 ```
-Al solito, imposto la directory principale di lavoro in base alla struttura della mia cartella personale (parte da modificare in base al proprio sistema). Il blocco `if()` mi permette di indicare due indirizzi diversi in base al sistema su cui lancio l'esecuzione (Windows o Linux).
+
+Al solito, imposto la directory principale di lavoro in base alla struttura della mia cartella personale (questa parte è da modificare in base al proprio sistema). Il blocco `if()` mi permette di indicare due indirizzi diversi in base al sistema su cui lancio l'esecuzione (Windows o Linux).
+
+Per questa esperienza consiglio di tenere separati i dati dalla cartella di lavoro principale, quindi vado a specificare due indirizzi: `rootfolder` e `datafolder`.
+
 ```{r}
 # Define the working directory (in this case, the path is different depending on whether the code is executed on Linux or Windows, but just for my convenience)
 
@@ -56,10 +71,9 @@ if(Sys.info()["sysname"]=="Linux"){
 }
 ```
 
-
 ### Definizione dei nomi dei files e delle cartelle
 
-In questo caso `datafolder` è la cartella dentro cui si trovano le sottocartelle dei dati grezzi (ATTENZIONE: occupano vari GB!), `resfolder` conterrà tutti i dati processati e i risultati, `figfolder` le figure. Per come è configurato ora, il codice genera queste ultime dentro la working directory, non dentro `datafolder`. Questo perché magari i dati si trovano su una risorsa esterna (un HDD o un cloud) e perché in ogni caso gli outputs pesano molto poco rispetto ai dati grezzi.
+Preparo gli indirizzi alle sottocartelle di `datafolder`, una per ogni strumento (ATTENZIONE: occupano vari GB!). Come nell'Esperienza 1, `resfolder` conterrà tutti i dati processati e i risultati, `figfolder` le figure.
 
 ```{r}
 # Define the project directories (relative path)
@@ -79,71 +93,133 @@ if(!dir.exists(resfolder)){  dir.create(resfolder) }
 
 ```
 
-## Strutture di dati
-Gli oggetti di dati georiferiti nel pacchetto `terra` possono avere una struttura vettoriale (punti, segmenti, poligoni) o  matriciale (rasters, ovvero campi grigliati).
+*(Nota: Per come è configurato ora, il codice genera queste cartelle dentro la working directory* `rootfolder`*, non dentro `datafolder`. Questo perché magari i dati si trovano su una risorsa esterna (un HDD o un cloud) e perché in ogni caso gli outputs pesano molto poco rispetto ai dati grezzi).*
 
-Le strutture predisposte per questi tipi di dati sono rispettivamente `SpatVector` e `SpatRaster` (dove "spat" sta chiaramente per "spatial").
+### Intervallo temporale di interesse
 
-### Confini nazionali
+Scelgo gli istanti di inizio e fine dell'intervallo temporale che voglio analizzare. Indico data e ora per mezzo di una stringa testuale nel formato standard "YYYYMMDDhhmm", ovvero il formato default per la funzione `ymd_hm()`, espresso in R dalla stringa `"%Y%m%d%H%M"`. Per tenere il notebook leggero nell'esecuzione seleziono solo il primo giorno disponibile:
+
 ```{r}
-# https://hub.arcgis.com/datasets/2b93b06dc0dc4e809d3c8db5cb96ba69_0/
-
-GlobalBG <- vect(paste0(datafolder,"World_Countries_(Generalized)"))
-ItalyBG  <- GlobalBG[112]
-ItalyBG
-
-plot(ItalyBG, col="grey")
-
+# Define time interval (between 1 October and 30 November 2016)
+sel_START <- "201610010000"
+sel_END   <- "201610012300"
 ```
 
-Fornisce sia i confini da plottare, sia un dominio con cui mascherare i raster (`mask` esegue il ritaglio che segue i bordi, mentre `crop` prende la bounding box)
+Tramite la suddetta funzione trasformo le due stringhe in variabili temporali. La funzione `seq()` crea la sequenza temporale di tutte le ore tra inizio (+ 1h) e fine dell'intervallo. La funzione `format()` le riconverte in stringhe testuali, da salvare in quello che sarà il mio array di riferimento della serie temporale, `sel.times` (ovvero *selected time intervals*).
 
+```{r}
+# Array of selected time intervals (hours)
+sel.times <- format(seq(ymd_hm(sel_START)+hours(1), 
+                        ymd_hm(sel_END), 
+                        by="1 hour"), "%Y%m%d%H%M")
+```
 
-Alcuni prodotti sono da convertire in mm/h perché sono forniti in altre unità di misura.
+### Fattori di conversione delle unità di misura
+
+Alcuni prodotti sono da convertire in **mm/h** perché sono forniti in altre unità di misura:
 
 ```{r}
 CorrectionFactor_HSAF = 3600 # kg/m2*s --> mm/h
 CorrectionFactor_ERA5 = 1000 # m/h --> mm/h
 ```
 
+## Strutture dei dati spaziali
 
+Gli oggetti di dati georiferiti nel pacchetto `terra` possono avere una **struttura vettoriale** (punti, segmenti, [poligoni]{.underline}) o **matriciale** ([rasters]{.underline}, ovvero campi continui grigliati). Le strutture predisposte per questi tipi di dati sono rispettivamente `SpatVector` e `SpatRaster` (dove "spat" sta chiaramente per "spatial") e si creano con le chiamate `vect()` e `rast()`.
 
-### Griglia comune ("MyGrid"):
+I **rasters** possono avere varie matrici di dati "stratificate" una sull'altra: sono i cosiddetti *layers*. Queste matrici condividono la stessa geometria e geolocalizzazione spaziale. Possono rappresentare diverse variabili allo stesso istante temporale oppure ad esempio vari istanti temporali della stessa variabile. Sono insomma oggetti 3D vincolati su una griglia 2D.
 
-Creo un oggetto SpatRaster sull'Italia
+I *layers* di un *raster* possono essere richiamati tramite il loro nome (una stringa) o il loro indice (un numero), inseriti dentro **doppie parentesi quadre**, come per gli elementi di una lista. Agli elementi di un oggetto vettoriale o alle celle di un raster si accede invece con il loro indice dentro singole parentesi quadre, come per gli elementi di un vettore. Vedremo qualche esempio tra poco.
+
+### Confini nazionali
+
+Trattando di dati georiferiti, è fondamentale avere a disposizione un database dei confini nazionali e delle linee di costa. Al seguente link è disponibile un **archivio open source** ([ArcGIS Hub: World Countries (Generalized)](https://hub.arcgis.com/datasets/2b93b06dc0dc4e809d3c8db5cb96ba69_0/)) dei confini di tutti gli stati del mondo (la risorsa è gia scaricata in `datafolder`).
+
+I confini sono forniti sotto forma di *shapefiles*. Si tratta di uno standard per oggetti vettoriali di *sistemi informativi geografici (GIS)*, che consiste non di un singolo files ma in un'insieme di files con lo stesso nome e diverse estensioni, il tutto all'interno di una cartella o di un archivio compresso. In particolare, sono tre le estensioni che troviamo SEMPRE nella cartella:
+
+-   **shp** contiene le informazioni della geometria vera e propria
+
+-   **shx** contiene l'indicizzazione della geometria
+
+-   **dbf** contiene una colonna di attributi per ogni geometria
+
+Tante altre sono opzionali, tra le quali è di nostro interesse:
+
+-   **prj** contiene la descrizione della proiezione geografica utilizzata.
+
+Maggiori informazioni si possono trovare qui: [ESRI Shapefile Technical Description](https://www.esri.com/content/dam/esrisites/sitecore-archive/Files/Pdfs/library/whitepapers/pdfs/shapefile.pdf)
+
+Per i nostri scopi, il pacchetto `terra` importa correttamente lo shapefile semplicemente creando uno `SpatVect` dalla cartella che lo contiene, senza bisogno di richiamare un'estensione in particolare:
+
+```{r}
+GlobalBG <- vect(paste0(datafolder,"World_Countries_(Generalized)"))
+GlobalBG
+```
+
+Lo **shapefile** viene importato come una serie di 251 poligoni (cfr. "*geometry : polygons*"), uno per ogni stato mondiale, ognuno con 7 attributi, che vediamo riportati in un *data frame*. E' importante notare che a questo punto il programma è in possesso di concetti come la geolocalizzazione in latitudine e longitudine di un punto e può esprimere in automatico quella posizione in differenti sistemi di riferimento (Coordinate Reference Systems, CRS). Nel caso di oggetti bidimensionali, come i poligoni degli stati, il software riconosce il **perimetro** dell'oggetto e la differenza tra **dentro e fuori** quel perimetro. Questa comprensione risulterà fondamentale per velocizzare moltissimo alcune operazioni.
+
+Seleziono il poligono dell'**Italia** (riga112):
+
+```{r}
+which(GlobalBG$COUNTRY=="Italy")
+
+ItalyBG  <- GlobalBG[112]
+plot(ItalyBG, col="grey")
+
+```
+
+Ricapitolando, lo shapefile fornisce due cose fondamentali alla nostra analisi:
+
+-   i **confini** da plottare come riferimento visivo nelle mappe
+
+-   un **dominio comune** a tutti i sensori, con cui mascherare (ovvero ritagliare lungo i bordi) tutti i raster
+
+### Griglia comune "MyGrid"
+
+Per un confronto punto a punto tra le stime dei diversi strumenti, non mi basta ritagliare i prodotti con gli stessi confini, ma devo trasferirli tutti su una **griglia geografica comune**, che chiameremo *MyGrid*.
+
+Imposto manualmente le proprietà della griglia: mi posiziono sull'Italia con risoluzione 0.1 gradi lat/lon.
 
 ```{r}
 # Select properties of the common grid ("MyGrid"):
 MyGrid_res = 0.1
 MyGrid_extLON = c(0, 25)
 MyGrid_extLAT = c(35, 50)
+```
 
-MyGrid <- rast(ncol=diff(MyGrid_extLON)/MyGrid_res, 
-               xmin=MyGrid_extLON[1], xmax=MyGrid_extLON[2], 
-               nrow=diff(MyGrid_extLAT)/MyGrid_res, 
-               ymin=MyGrid_extLAT[1], ymax=MyGrid_extLAT[2])
+Creo un oggetto *SpatRaster* sull'Italia con le proprietà appena definite (il numero di righe e colonne del raster viene calcolato in automatico come rapporto tra estensione e risoluzione desiderata):
+
+```{r}
+MyGrid <- rast(ncol = round(diff(MyGrid_extLON)/MyGrid_res),
+               xmin = MyGrid_extLON[1], 
+               xmax = MyGrid_extLON[2], 
+               nrow = round(diff(MyGrid_extLAT)/MyGrid_res), 
+               ymin = MyGrid_extLAT[1], 
+               ymax = MyGrid_extLAT[2])
 
 MyGrid
 
 ```
 
-Situazione e obiettivo
-
-Input: 4 risoluzioni spaziali e temporali diverse
-Output: stessa griglia, cumulate orarie (o mm/h medi orari)
+Il raster così creato non contiene nessun dato, ma ha tutte le informazioni geometriche e geografiche necessarie per manipolare gli altri raster dei prodotti (che tra poco andremo a generare) in modo che acquistino una forma comune.
 
 ## Import data
 
+Inizio ora a importare i dati satellitari nell'ambiente di lavoro. L'obiettivo è, a prescindere dalla forma in cui sono disponibili, di riportarli all'interno di uno *SpatRaster*. La procedura di lettura da files binari o testuali è molto lenta e richiede una certa disponibilità di memoria. Una volta trasformati in rasters, i dati saranno accessibili molto più rapidamente e occuperanno meno spazio.
 
+### A) ERA5
 
-### A) ERA5 
+I dati della rianalisi ERA5 sono già forniti in un formato raster stratificato e georiferito (file GRIB). L'importazione sarà quindi piuttosto lineare ed immediata.
 
 ```{r}
+# Search for files in ERA5.folder with the .grib extension ---------------------
 ERA5.files <- dir(ERA5.folder, pattern=".grib")
-length(ERA5.files)
 ERA5.files
 ```
 
+#### Importare i dati
+
+I dati sono contenuti in un singolo file, che viene importato automaticamente da `rast()`. Il fattore di conversione dell'unità di misura è applicato in un colpo a tutti i dati numerici all'interno del raster.
 
 ```{r}
 ## Import data ------------------------------------------------------------------
@@ -151,83 +227,157 @@ ERA5.raster <- rast(paste0(ERA5.folder, ERA5.files)) * CorrectionFactor_ERA5
 dim(ERA5.raster)
 ```
 
+I due messaggi di errore si possono ignorare. Il raster ottenuto ha dimensioni 49 x 53 e ha 1464 layers. Trattandosi di due mesi di dati orari, notiamo come 1464 = 24 x (30+31) sia proprio il numero di ore totali.
+
+#### Nominare i layers
+
+Per accedere ai layers senza errori, voglio nominarli con la stringa temporale dell'ora a cui si riferiscono, formattata nello standard "YYYYMMDDhhmm", ovvero il formato default per la funzione `ymd_hm()`, espresso in R dalla stringa `"%Y%m%d%H%M"`.
+
+Per ottenere velocemente tutti i nomi, leggo dal nome del file GRIB gli istanti di inizio e fine dell'intervallo (si veda il nome del files stampato poco sopra: `"ERA5_2016100100_2016113023.grib"`). Per farlo utilizzo la funzione `substr()` che recupera i caratteri della stringa nelle posizioni rispettivamente da 6 a 15 per l'istante iniziale e da 17 a 26 per l'istante finale.
 
 ```{r}
 ## Assign Date ------------------------------------------------------------------
 ERA5.times_START <- substr(ERA5.files,6,15)
 ERA5.times_END   <- substr(ERA5.files,17,26)
+```
 
-ERA5.times <- format(seq(ymd_h(ERA5.times_START), ymd_h(ERA5.times_END), by="1 hour"), "%Y%m%d%H%M")
+Creo poi l'intera sequenza con la funzione `seq()`, impostando un passo di un'ora.
 
+```{r}
+ERA5.times <- format(seq(ymd_h(ERA5.times_START), 
+                         ymd_h(ERA5.times_END), 
+                         by="1 hour"), "%Y%m%d%H%M")
+```
+
+Infine assegno il vettore di stringhe ottenuto ai nomi dei layers.
+
+```{r}
 names(ERA5.raster) <- ERA5.times
+```
 
+La visualizzazione riassuntiva del raster nella console di R mostra (nell'ordine):
+
+-   la classe dell'oggetto
+
+-   le sue dimensioni (come fosse una matrice 3D)
+
+-   la risoluzione spaziale
+
+-   l'estensione
+
+-   il sistema di coordinate di riferimento (in questo caso ereditato dal GRIB file)
+
+-   l'origine dei dati (memoria RAM o altro)
+
+-   i nomi dei layers che sono correttamente impostati come stringhe "YYYYMMDDhhmm"
+
+-   i valori minimi e massimi del layer, utili per valutare rapidamente il contenuto
+
+```{r}
 ERA5.raster
 ```
 
+#### Stampare le mappe
+
+Il pacchetto terra prevede un **metodo specifico** della funzione base `plot()` per oggetti *SpatRaster* (si veda `?terra::plot`). I valori sono già mostrati in scala colore su una mappa lat/lon. Più oggetti si possono sovrapporre specificando `add = T` come parametro di `plot()` (dal secondo in poi).
 
 ```{r}
 plot(ERA5.raster[["201610012100"]])
 plot(ItalyBG, add =T)
 ```
 
+Il comando plot di diversi layers in contemporanea crea frames multipli (ma fallisce la stampa dei confini con *add=T*, vedremo in seguito una soluzione):
 
 ```{r}
-ERA5.MyGrid <- terra::project(ERA5.raster, MyGrid)
-
-plot(ERA5.MyGrid[["201610012100"]])
-plot(GlobalBG, add =T)
+plot(ERA5.raster[[c("201610012100", "201610012200")]])
+plot(ItalyBG, add =T)
 
 ```
 
+#### Proiettare su una geometria diversa
+
+A questo punto ho ancora un raster a risoluzione 0.25 ° lat/lon. Per trasferire i dati su una griglia con le proprietà di *MyGrid* uso il comando `project()` (in questo caso indico espressamente l'appartenenza al pacchetto `terra` con l'operatore `::` per non rischiare ambiguità). Per risparmiare tempo di calcolo, proietto solo i layers degli istanti che mi interessano, ovvero quelli i cui nomi sono contenuti nelle stringhe temporali di `sel.times`.
+
+```{r}
+ERA5.MyGrid <- terra::project(ERA5.raster[[sel.times]], MyGrid)
+ERA5.MyGrid
+```
+
+Il raster ottenuto NON ha sovrascritto *MyGrid* ma ne ha solo copiato la geometria. Ora il numero di righe e colonne, la risoluzione e l'estensione sono quelli desiderati. Anche il sistema di coordinate di riferimento (**CRS**) è passato a quello standard (**WGS 84**). I layers hanno mantenuto la loro denominazione con la stringa temporale, ma ora ci sono solo quelli contenuti in `sel.times`.
+
+I valori sono stati assegnati alle nuove celle tramite **interpolazione bilineare**. Se andiamo a verificare le impostazioni di `terra::project()` infatti, notiamo come sia il metodo predefinito (`method =` ). Altri metodi di interpolazione disponibili sono `near` (nearest neighbour), `cubic` e `cubicspline`.
+
+Se plotto i due rasters uno accanto all'altro (impostanto `mfrow = c(1,2)` con la funzione `par()`), noto sia l'aumento di risoluzione, sia l'ingrandimento dell'estensione della griglia (anche detta *bounding box*, o *bbox*):
+
+```{r}
+par(mfrow = c(1,2))
+
+plot(ERA5.raster[["201610012100"]])
+plot(ItalyBG, add =T)
+
+plot(ERA5.MyGrid[[c("201610012100")]])
+plot(ItalyBG, add =T)
+```
 
 ### B) H-SAF
-- importare i dati HSAF e rasterizzarli
 
+I dati H-SAF si trovano sempre dentro dei GRIB, ma la specifica del sistema di coordinate di riferimento non viene interpretato correttamente da `rast()`. Non avendo trovato online nessuna informazione sulla stringa CRS corretta, si sfruttano le coordinate della griglia fornite su un file a parte.
+
+*Nota: i dati H-SAF qui considerati fanno riferimento al prodotto H03A, che si estendeva sul solo emisfero nord sopra l'europa, mentre ora è operativo il prodotto H03B che si estende su tutto il disco di SEVIRI (MSG)*.
 
 ```{r}
 # Search GRIB files ------------------------------------------------------------
 HSAF.files <- dir(HSAF.folder, pattern=".grb")
-
-# TENGO SOLO IL PRIMO OTTOBRE QUI NEL NOTEBOOK
-HSAF.files <- HSAF.files[substr(HSAF.files,9,12)=="1001"]
-
 length(HSAF.files)
 ```
 
+Il prodotto H-SAF ha dati a 15 minuti. I files presenti nella cartella sono uno per istante temporale. Creo il vettore dei tempi direttamente dai nomi di ogni file, nuovamente utilizzando la funzione base `substr()`.
 
+```{r}
+## Assign Date ----------------------------------------------------------------
+HSAF.times <- paste0(substr(HSAF.files,5,12),substr(HSAF.files,14,17))
+```
+
+La lettura di così tanti files è lenta. Inoltre leggere files che non verranno poi utilizzati riempie inutilmente la memoria RAM. Andiamo quindi ad effettuare la selezione temporale direttamente sull'array delle stringhe dei nomi dei files (e su quello degli intervalli temporali, che deve restare coerente coi files):
+
+```{r}
+## Select only files inside the selected time interval -------------------------
+sel_idx <- which(ymd_hm(HSAF.times) >= ymd_hm(sel_START) & 
+                   ymd_hm(HSAF.times) <= ymd_hm(sel_END))
+HSAF.files <- HSAF.files[sel_idx]
+HSAF.times <- HSAF.times[sel_idx]
+```
+
+Importo le coordinate dal file esterno di supporto:
+
+```{r}
+## Import Coordinates (unstructured grid) -------------------------------------
+HSAF.coordinates <- read.table(file(paste0(datafolder,"SAT_coordinates.dat")),
+                               sep = " ", 
+                               na.string = NA, 
+                               as.is = TRUE, 
+                               header = FALSE)
+```
+
+I files presenti nella cartella (uno per istante temporale) vengono letti con la funzione `readGDAL` del pacchetto `rgdal`, che riesce ad interpretare autonomamente i GRIB. La lettura avviene all'interno di un ciclo sui vari istanti temporali.
+
+*Nota: Le coordinate sono state ribaltate per garantire la corrispondenza col metodo di indicizzazione di `matrix()`, che apparentemente è opposto a quello con cui sono state scritte le coordinate.*
 
 ```{r message=FALSE, warning=FALSE}
 ## Import data (Precipitation Rate [kg/m2 s]) ------------------------------------
-HSAF.list <- list()
-for(i in 1:length(HSAF.files)) {
-  HSAF.list[[i]] <- rgdal::readGDAL(paste0(HSAF.folder,HSAF.files[i]), silent = TRUE)
-}
-length(HSAF.list)
-dim(HSAF.list[[1]])
-```
-
-
-```{r}
-## Import Coordinates (unstructured grid) ---------------------------------------
-HSAF.coordinates <- read.table(file(paste0(datafolder,"SAT_coordinates.dat")),
-                               sep = " ", na.string = NA, as.is = TRUE, header = FALSE)
-dim(HSAF.coordinates)
-
-## Assign Date ------------------------------------------------------------------
-HSAF.times <- paste0(substr(HSAF.files,5,12),substr(HSAF.files,14,17))
-HSAF.times [c(1,length(HSAF.times))]
-```
-
-
-```{r message=FALSE, warning=FALSE}
-## Merge Data -------------------------------------------------------------------
 HSAF.df <- HSAF.coordinates[1710000:1,]
-for(i in 1:length(HSAF.times)) HSAF.df <- cbind(HSAF.df, matrix(HSAF.list[[i]][[1]], dim(HSAF.list[[1]])[1], 1))
-colnames(HSAF.df) <- c("Lon", "Lat", HSAF.times)
 
-head(HSAF.df[,1:6])
+
+for(i in 1:length(HSAF.times)){
+  HSAF.df <- cbind(HSAF.df, 
+                   matrix(rgdal::readGDAL(paste0(HSAF.folder,HSAF.files[i]), 
+                                          silent = TRUE)[[1]], 1710000, 1))
+} 
+colnames(HSAF.df) <- c("Lon", "Lat", HSAF.times)
 dim(HSAF.df)
 ```
+
+Viene creato un *data frame* con colonne per Lon, Lat e per ogni istante temporale. Possiamo già effettuare un primo filtraggio anche senza avere ancora portato i dati dentro un raster. Filtriamo solo le righe che si riferiscono a coppie lat/lon di nostro interesse (area dell'Italia):
 
 ```{r}
 
@@ -237,24 +387,31 @@ HSAF.df_ITA <- HSAF.df %>% filter(
   Lat >= 30,
   Lat <= 60
 ) 
-
 rownames(HSAF.df_ITA) <- 1:nrow(HSAF.df_ITA)
-
-head(HSAF.df_ITA)
+HSAF.df_ITA[121784:121790 ,1:6]
 ```
 
+E' arrivato il momento di trasportare i dati rimasti all'interno di un raster, ovver di "rasterizzarli". Non a caso la funzione da utilizzare si chiama `rasterize()`. Questa funzione assegna i valori forniti al parametro `values =`, relativi alle coordinate indicate dalla matrice al primo argomento, ovvero `cbind(HSAF.df_ITA$Lon, HSAF.df_ITA$Lat)`, ad una griglia che eredita le proprietà dal secondo argomento, ovvero *MyGrid*.
+
+Inizialmente viene creato un raster vuoto, *HSAF.raster,* ad immagine di *MyGrid* tramite il comando `rast(MyGrid)`. Gli vengono poi agganciati tanti layers quanti sono gli istanti temporali selezionati, tramite l'applicazoine ricorsiva della funzione `c()` , che combina il raster esistente con il nuovo layer appena creato da `rasterize(),` all'interno del ciclo `for()`.
+
+I nomi dei layers vengono poi posti uguali alle stringhe temporali a cui si riferiscono, rispettando la convenzione utilizzata per ERA5.
 
 ```{r}
 HSAF.raster <- rast(MyGrid)
+
 for(i in 1:length(HSAF.times)){
-  HSAF.raster <- c(HSAF.raster, rasterize(cbind(HSAF.df_ITA$Lon, HSAF.df_ITA$Lat), MyGrid, values=as.array(HSAF.df_ITA[[HSAF.times[i]]])) * CorrectionFactor_HSAF)
+  HSAF.raster <- c(HSAF.raster, 
+                   rasterize(cbind(HSAF.df_ITA$Lon, HSAF.df_ITA$Lat), 
+                             MyGrid, 
+                             values=as.array(HSAF.df_ITA[[HSAF.times[i]]])
+                   ) * CorrectionFactor_HSAF)
 }
 names(HSAF.raster) <- HSAF.times
-HSAF.raster <- clamp(HSAF.raster, 0, values=F)
-
 HSAF.raster
 ```
 
+# \>\>\>\>\>\> Sono arrrivato qui
 
 ```{r}
 plot(HSAF.raster[["201610012057"]])
@@ -262,24 +419,14 @@ plot(GlobalBG, add=T)
 
 ```
 
-
-
-
-
-- Analisi
-
+-   Analisi
 
 ```{r}
 hist(HSAF.raster, "201610012057")
 
 ```
 
-
-
-
-
 ### C) GPM-IMERG
-
 
 ```{r}
 # Search IMR files (ASCII) -----------------------------------------------------
@@ -321,7 +468,6 @@ GPM.coordinates <- 0
 for(i in LonGPM) for(j in LatGPM) GPM.coordinates <- c(GPM.coordinates,i,j)
 ```
 
-
 ```{r}
 # Data extraction
 GPM.coordinates2 <- t(matrix(GPM.coordinates[-1], 2, length(LonGPM)*length(LatGPM)))
@@ -344,15 +490,12 @@ GPM.raster <- clamp(GPM.raster, 0, values=F)
 GPM.raster
 ```
 
-
 ```{r}
 plot(GPM.raster[["201610012100"]])
 plot(GlobalBG, add =T) #, col = "grey85")
 # ItalyBGfun(NULL, "red")
 
 ```
-
-
 
 ### D) RAIN GAUGES
 
@@ -408,13 +551,11 @@ for(i in 1:length(RG.times)){
 names(RG.raster) <- RG.times
 ```
 
-
 ```{r}
 RG.raster <- clamp(RG.raster, 0, values=F)
 RG.raster
 
 ```
-
 
 ```{r}
 plot(RG.raster[["201610012100"]])
@@ -424,9 +565,8 @@ plot(ItalyBG, add =T) #, col = "grey85")
 
 ```
 
-
-
 ## Dominio spaziale omogeneo (Italia in questo caso)
+
 mask (per avere base spaziale comune)
 
 ```{r}
@@ -434,9 +574,6 @@ plot(mask(ERA5.MyGrid[["201610012100"]], ItalyBG))
 
 
 ```
-
-
-
 
 ## **NEW** Funzione media oraria
 
@@ -491,7 +628,8 @@ hourlyMean <- function(IN.raster, sel.times){
 ```
 
 ## **NEW** Selezione di un intervallo comune (raster orari)
- seleziono il primo giorno (light per NOTEBOOK)
+
+seleziono il primo giorno (light per NOTEBOOK)
 
 ```{r}
 # Define time interval (between 1 October and 30 November 2016)
@@ -509,13 +647,11 @@ ERA5.final <- mask(ERA5.MyGrid[[sel.times]], ItalyBG)
 ERA5.final
 ```
 
-
 ```{r}
 RG.final   <- mask(RG.raster[[sel.times]], ItalyBG)
 RG.final
 
 ```
-
 
 ## **NEW** Aggregazione: medie orarie
 
@@ -530,8 +666,6 @@ HSAF.final
 
 ```
 
-
-
 ```{r}
 par(mfrow=c(2,2))
 plot(ERA5.final[["201610012100"]], main = "ERA5")
@@ -541,7 +675,10 @@ plot(GPM.final[["201610012100"]], main = "GPM-IMERG")
 
 ```
 
+**Riassumendo**: mi trovo in input quattro campi georiferiti (rasters) con risoluzioni spaziali e temporali diverse, voglio ottenere in output quattro campi sulla stessa griglia e alla stessa risoluzione (cumulate orarie). Per farlo ho preparato una griglia sull'area dell'Italia e con passo omogeneo e ho predisposto una funzione che calcola le cumulate orarie.
+
 ## SALVATAGGIO DEI RASTER "FINAL"
+
 ```{r}
 writeRaster(ERA5.final, paste0(resfolder, "ERA5_light.tif"), overwrite=TRUE )
 writeRaster(RG.final, paste0(resfolder, "RG_light.tif"), overwrite=TRUE )
@@ -550,15 +687,19 @@ writeRaster(HSAF.final, paste0(resfolder, "HSAF_light.tif"), overwrite=TRUE )
 
 ```
 
-
-
 Per leggere bisogna usare poi: `rast("nomefile")`
 
+```{r}
+ERA5 <- rast(paste0(resfolder, "ERA5_final.tif"))
+RG   <- rast(paste0(resfolder, "RG_final.tif"))
+GPM <- rast(paste0(resfolder, "GPM_final.tif"))
+HSAF <- rast(paste0(resfolder, "HSAF_final.tif"))
 
-## plot mappe più curato
+```
 
+## NEWE plot mappe più curato
 
-TODO implementare + colors ### **NEW** Funzione per plot mappe
+TODO implementare + colors \### **NEW** Funzione per plot mappe
 
 ```{r}
 plotMap <- function(raster, layerNames){
@@ -588,29 +729,25 @@ plotMap <- function(raster, layerNames){
 
 ```
 
-
-
-
 ```{r}
+
+plotMap(HSAF, "201610012100")
+
 # !! I nomi degli assi rimangono fuori dal plot! Probelma del notebook probabilmente
+
 
 png(filename = paste0(figfolder, "test.png"),
     width    = 480,
     height   = 322,
     units    = "px")
 
-plotMap(HSAF.raster, "201610012057")
+plotMap(HSAF, "201610012100")
 
 dev.off()
 
 ```
 
-
-
-TODO ### **NEW** Salvataggio immagini 2x2
-
-
-
+TODO \### **NEW** Salvataggio immagini 2x2
 
 ## PDFs
 
@@ -622,7 +759,6 @@ RG.data <- as.vector(values(RG.final))
 hist(RG.data)
 ```
 
-
 ```{r}
 data <- tibble(
   Raingauges = RG.data,
@@ -633,17 +769,15 @@ data <- tibble(
     names_to = "Product",
     values_to = "Precipitation"
   )
+
 data %>%
   ggplot(aes(Precipitation, color = Product)) + 
-  geom_freqpoly() + 
+  geom_freqpoly(binwidth = 1) + 
   scale_y_log10()
 
 ```
 
-
-
 ## **NEW** Indicatori statistici
-
 
 ```{r}
 statsFun <- function(Var, Ref){
@@ -723,8 +857,8 @@ statsFun_categorical <- function(Var, Ref){
 
 ```
 
-
 ## Scatterplots
+
 TODO
 
 ```{r}
@@ -737,4 +871,3 @@ tibble(RG.data,
 # aggiungere scala colore log
 
 ```
-
