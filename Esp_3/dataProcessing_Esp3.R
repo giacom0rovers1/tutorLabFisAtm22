@@ -96,8 +96,8 @@ hourlyMean <- function(IN.raster, sel.times){
 
 # Install/load packages
 for(pkg in packages){
-  if(!require(pkg, character.only = T)){install.packages(pkg)} 
-  library(pkg, character.only = T)
+  if(!require(pkg, character.only=T)){install.packages(pkg)} 
+  library(pkg, character.only=T)
 }
 
 # Set the working directory
@@ -156,19 +156,19 @@ ERA5.times <- seq(ymd_h(ERA5.times_START),
                   by="1 hour") %>% format("%Y%m%d%H%M")
 names(ERA5.raster) <- ERA5.times
 
-## Project over MyGrid  -------------------------------------------------------
-ERA5.MyGrid <- terra::project(ERA5.raster, MyGrid)
+## Project over MyGrid ( desired time intervals only)--------------------------
+ERA5.MyGrid <- terra::project(ERA5.raster[[sel.times]], MyGrid)
 
 ## Filter out negative values -------------------------------------------------
 ERA5.MyGrid <- clamp(ERA5.MyGrid, 0, values=F)
 
-## Select only Italy and desired time intervals  ------------------------------
-ERA5.final <- mask(ERA5.MyGrid[[sel.times]], ItalyBG)
+## Select only Italy  ---------------------------------------------------------
+ERA5.final <- mask(ERA5.MyGrid, ItalyBG)
 
 ## Save GeoTiff file ----------------------------------------------------------
 writeRaster(ERA5.final, paste0(resfolder, "ERA5_final.tif"), overwrite=TRUE )
 
-## Clear memory  ---------------------------------------------------------------
+## Clear memory  --------------------------------------------------------------
 rm(ERA5.raster, ERA5.MyGrid, ERA5.final)
 
 
