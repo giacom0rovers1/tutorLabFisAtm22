@@ -19,6 +19,8 @@ Sfrutteremo dei tools appositi: il pacchetto `terra` e le funzioni della libreri
 
 Per approfondire l'analisi di dati spaziali con R consiglio di consultare [Spatial Data Science with R and "terra"](https://rspatial.org/terra/index.html)
 
+------------------------------------------------------------------------
+
 ## Inizializzazione
 
 Per cominciare inizializziamo l'ambiente di calcolo: cancello eventuali variabili...
@@ -42,7 +44,8 @@ packages <- c(
   "zoo",
   "terra",
   "rgdal",
-  "progress"
+  "ncdf4",
+  "ggsci"
 )
 
 for(pkg in packages){
@@ -133,6 +136,8 @@ Imposto un valore minimo di intensità di pioggia "realistica". Userò questo va
 THR <- 0.1 # mm/h
 ```
 
+------------------------------------------------------------------------
+
 ## Strutture dei dati spaziali
 
 Gli oggetti di dati georiferiti nel pacchetto `terra` possono avere una **struttura vettoriale** (punti, segmenti, [poligoni]{.underline}) o **matriciale** ([rasters]{.underline}, ovvero campi continui grigliati). Le strutture predisposte per questi tipi di dati sono rispettivamente `SpatVector` e `SpatRaster` (dove "spat" sta chiaramente per "spatial") e si creano con le chiamate `vect()` e `rast()`.
@@ -214,7 +219,9 @@ MyGrid
 Il raster così creato non contiene nessun dato, ma ha tutte le informazioni geometriche e geografiche necessarie per manipolare gli altri raster dei prodotti (che tra poco andremo a generare) in modo che acquistino una forma comune.
 
 ### Bounding box
+
 Per comodità di visualizzazione, creo un poligono che segua i margini della griglia *MyGrid* (ovvero la sua estensione, o la sua bounding box).
+
 ```{r}
 bbox.lonlat <- cbind(
   id = 1, 
@@ -225,16 +232,19 @@ bbox.lonlat <- cbind(
 bbox.lonlat
 
 ```
+
 ```{r}
 bbox.polyg <- vect(bbox.lonlat, type="polygons")
 bbox.polyg
 ```
+
 ```{r}
 plot(GlobalBG, xlim=c(0,30), ylim=c(33,52))
 plot(ItalyBG, col="grey", add=T)
 plot(bbox.polyg, add=T, border="red", lwd=2)
 ```
 
+------------------------------------------------------------------------
 
 ## Acquisizione
 
@@ -396,72 +406,6 @@ plot(ItalyBG, add =T)
 Posso anche usare la maschera direttamente come input per l'analisi categorica (vedi dopo).
 
 Di base utilizzerò `clamp()` per esigenze grafiche (ad esempio per la trasparenza dei valori sotto soglia nelle mappe), per selezionare rapidamente dei sottoinsiemi del campo o per rimuovere i dati non fisici (tipo -9999), mentre userò la maschera per l'analisi statistica delle occorrenze sopra e sotto soglia.
-
-#### Istogrammi
-
-Anche la funzione base `hist()` ha un metodo specifico per oggetti *SpatRaster*: il secondo argomento è il nome del livello selezionato:
-
-```{r}
-hist(ERA5.MyGrid, 
-     "201610012100", 
-     xlab="Hourly average rain rate (mm/h)")
-```
-
-Posso utilizzare la funzione `clamp()` appena introdotta per mostrare la distribuzione dei soli valori al di sopra della soglia *THR*:
-
-```{r}
-hist(clamp(ERA5.MyGrid, THR, values=F), 
-     "201610012100", 
-     xlab="Hourly average rain rate (mm/h)")
-
-```
-
-Se non fornisco nessun argomento, gli istogrammi dei vari layers vengono giustapposti come nel caso delle mappe (fino a 16 elementi), diventando illeggibili:
-
-```{r}
-hist(clamp(ERA5.MyGrid, THR, values=F), xlab="AvgRR (mm/h)")
-```
-
-Per aggregare tutti i livelli assieme, devo accedere direttamente ai valori delle celle. Posso farlo con la funzione `values()` che restituisce la matrice dei dati del raster (n celle x n livelli):
-
-```{r}
-dim(values(ERA5.MyGrid))
-```
-
-```{r}
-hist(values(clamp(ERA5.MyGrid, THR, values=F)), 
-     xlab="Hourly average rain rate (mm/h)",
-     main="ERA5 Precipitation - 01 Oct. 2016")
-```
-
-#### Scatterplots
-
-Anche gli scatterplot sono già predisposti per oggetti SpatRaster. Ovviamente viene garantita la corrispondenza cella per cella. A titolo di esempio mostriamo lo scatterplot tra due layers successivi di ERA5, perché per confrontare prdodotti diversi dobbiamo prima completare il processo di omogeneizzazione delle risoluzioni spaziali e temporali (si veda dopo).
-
-```{r, fig.asp=1, fig.width=4}
-plot(clamp(ERA5.MyGrid[["201610012100"]], THR, values=F),
-     clamp(ERA5.MyGrid[["201610012200"]], THR, values=F), 
-     xlim=c(0,7), ylim=c(0,7), col = "navyblue")
-abline(a=0, b=1)
-```
-
-Per sfruttare le funzioni più avanzate di `ggplot()` invece è necessario tornare alla struttura dei data frames. Concatenando `values()` e `as.data.frame()` si ottiene un data frame con tante colonne quanti i livelli del raster. La funzione `geom_bin_2D()` effettua il binning dei dati in *x* e *y* e restituisce il conteggio in scala colore, che di seguito è impostata in scala logaritmica per gestire l'accumulo di dati vicino all'origine.
-
-```{r, fig.asp=1, fig.width=4}
-clamp(ERA5.MyGrid, THR, values=F) %>%
-  
-  values() %>%
-  as.data.frame() %>%
-  
-  ggplot(aes(`201610012100`, `201610012200`)) + 
-  geom_bin_2d(binwidth = 0.2) +
-  coord_fixed() + 
-  geom_abline(slope = 1, intercept = 0, alpha = 0.2) +
-  scale_fill_binned(type = "viridis", 
-                    trans = "log", 
-                    breaks = c(2, 5, 10, 25, 50, 100)) +
-  theme_bw()
-```
 
 ### B) H-SAF
 
@@ -696,15 +640,15 @@ plot(clamp(GPM.raster[["201610012100"]], THR, values=F))
 plot(GlobalBG, add =T)
 
 ```
+
 Generazione della maschera:
+
 ```{r}
 GPM.mask <- GPM.raster >= THR
 
 plot(GPM.mask[["201610012100"]])
 plot(ItalyBG, add =T)
 ```
-
-
 
 ### D) RainGauges
 
@@ -779,6 +723,7 @@ RG.raster <- clamp(RG.raster, 0, values=F)
 RG.raster
 
 ```
+
 Si noti come il dominio dei pluviometri interpolati è esteso (ragionevolmente) alla sola terraferma. Bisognerà filtrare allora il mare anche dagli altri prodotti per ottenere un confronto coerente.
 
 ```{r}
@@ -788,7 +733,9 @@ plot(ItalyBG, add =T) #, col = "grey85")
 
 
 ```
+
 Generazione della maschera:
+
 ```{r}
 RG.mask <- RG.raster >= THR
 
@@ -796,18 +743,21 @@ plot(RG.mask[["201610012100"]])
 plot(ItalyBG, add =T)
 ```
 
-## Elaborazione 
+------------------------------------------------------------------------
+
+## Elaborazione
+
 Ci troviamo con quattro rasters che a questo punto condividono già la stessa griglia, ma le risoluzioni temporali non sono ancora omogenee. Inoltre hanno le celle popolate con logiche diverse al loro interno (dati sul mare, dati solo sulla terraferma, ecc...).
 
-
-
 ### Aggregazione temporale: medie orarie
+
 Il primo problema riguarda H-SAF (risoluzione: 15min) e GPM-IMERG (risoluzione: 30min). Si vogliono aggregare i livelli in medie orarie. Viene preparata una funzione che si occupi del compito, personalizzata sulle strutture dati in uso.
 
-#### Funzione hourlyMean
-La funzione richiede in input il raster da aggregare ("IN.raster") e il vettore degli istanti temporali per i quali calcolare la media oraria ("sel.times"). Non è necessario che ci sia alcuna relazione tra i tempi dei livelli del raster e gli istanti selezionati (come nel caso di H-SAF, dove gli intervalli non cadono sulle ore piene). L'unico requisito è che la risoluzione temporale in input non sia più frequente del minuto.
+#### Funzione `hourlyMean()`
 
-Il raster in output ("OUT.raster") eredita tutte le proprietà geometriche dal raster in input. Il vettore "interval" contiene ricorsivamente tutti i minuti dell'ora che termina con ognuno dei "sel.times". Qualunque livello in input il cui timestamp coincida con uno dei 60 minuti di "interval" viene mediato nel layer di output. Se nessun layer è presente, l'ora viene saltata e non comparirà nei layers di "OUT.raster". I layer vengono agganciati ricorsivamente ad "OUT.raster" e infine rinominati con i loro timestamps.
+La funzione richiede in **input** il raster da aggregare (*IN.raster*) e il vettore degli istanti temporali per i quali calcolare la media oraria (*sel.times*). Non è necessario che ci sia alcuna relazione tra i tempi dei livelli del raster e gli istanti selezionati (come nel caso di H-SAF, dove gli intervalli non cadono sulle ore piene). L'unico requisito è che la risoluzione temporale in input non sia più frequente del minuto.
+
+Il raster in **output** (*OUT.raster*) eredita tutte le proprietà geometriche dal raster in input. Il vettore *interval* contiene ricorsivamente tutti i minuti dell'ora che termina con ognuno dei *sel.times*. Qualunque livello in input il cui timestamp coincida con uno dei 60 minuti di *interval* viene mediato nel layer di output. Se nessun layer è presente, l'ora viene saltata e non comparirà nei layers di *OUT.raster*. I layer vengono agganciati ricorsivamente ad *OUT.raster* e infine rinominati con i loro timestamps.
 
 ```{r}
 hourlyMean <- function(IN.raster, sel.times){
@@ -851,79 +801,83 @@ hourlyMean <- function(IN.raster, sel.times){
 
 ```
 
-Applico la funzinoe a "GPM.raster"...
+Applico la funzinoe a *GPM.raster*...
+
 ```{r}
 GPM.hourly <- hourlyMean(GPM.raster, sel.times)
 GPM.hourly
 ```
-... e a "HSAF.raster". Notare che il numero di layer ora è lo stesso.
+
+... e a *HSAF.raster*. Notare che il numero di layer ora è lo stesso.
 
 ```{r}
 HSAF.hourly <- hourlyMean(HSAF.raster, sel.times)
 HSAF.hourly
 ```
 
-
-
-
 ### Dominio spaziale omogeneo
-Si sfrutta nuovamente la funzione mask(), ma questa volta come maschera non si fornisce un raster logico (TRUE/FALSE) bensì un poligono, nello specifico i confini nazionali italiani. La funzione conserva intatte le celle all'interno del perimetro del poligono, mentre rigetta (NA) quelle al di fuori di esso.
 
-Tramite plot() vediamo il raster prima (sx) e dopo (dx) la maschera: i valori uguali a zero (grigio chiaro) disegnano il profilo dell'Italia, mentre gli NA sono bianchi (la differenza può essere più o meno evidente in base alle caratteristiche di gamma del proprio schermo).
+Si sfrutta nuovamente la funzione `mask()`, ma questa volta come maschera non si fornisce un raster logico (TRUE/FALSE) bensì un **poligono**, nello specifico i confini nazionali italiani. La funzione conserva intatte le celle all'interno del perimetro del poligono, mentre rigetta (NA) quelle al di fuori di esso.
+
+Tramite `plot()` vediamo il raster **prima (sx)** e **dopo (dx)** la maschera: i valori uguali a zero (grigio chiaro) disegnano il profilo dell'Italia, mentre gli NA sono bianchi (la differenza può essere più o meno evidente in base alle caratteristiche di gamma del proprio schermo).
 
 ```{r}
 {
   par(mfrow=c(1,2))
-  plot(ERA5.MyGrid[["201610012100"]])
+  plot(ERA5.MyGrid[["201610012100"]], main="Whole domain")
   plot(bbox.polyg, add=T, border="red", lwd=2)
   
-  plot(mask(ERA5.MyGrid[["201610012100"]], ItalyBG))
+  plot(mask(ERA5.MyGrid[["201610012100"]], ItalyBG), main="Italy")
   plot(bbox.polyg, add=T, border="red", lwd=2)
 }
 
 ```
-Applico la maschera direttamente a ERA5 e RainGauges, che sono già a risoluzione oraria.
+
+Applico la maschera sui quattro rasters a risoluzione oraria:
 
 ```{r}
-ERA5.final <- mask(ERA5.MyGrid[[sel.times]], ItalyBG)
+ERA5.final <- mask(ERA5.MyGrid, ItalyBG)
 ERA5.final
 ```
 
 ```{r}
-RG.final   <- mask(RG.raster[[sel.times]], ItalyBG)
+RG.final <- mask(RG.raster, ItalyBG)
 RG.final
 
 ```
 
-
-
-
 ```{r}
-GPM.final  <- mask(GPM.hourly, ItalyBG)
+GPM.final <- mask(GPM.hourly, ItalyBG)
 GPM.final
 ```
 
-
 ```{r}
-HSAF.final  <- mask(HSAF.hourly, ItalyBG)
+HSAF.final <- mask(HSAF.hourly, ItalyBG)
 HSAF.final
 
 ```
 
+Ecco il risultato finale:
+
 ```{r}
+common_timestep = "201610012100"
 {
   par(mfrow=c(2,2))
-  plot(ERA5.final[["201610012100"]], main = "ERA5")
-  plot(RG.final[["201610012100"]], main = "RainGauges")
-  plot(HSAF.final[["201610012100"]], main = "H-SAF")
-  plot(GPM.final[["201610012100"]], main = "GPM-IMERG")
+  plot(ERA5.final[[common_timestep]], main = "ERA5")
+  plot(RG.final[[common_timestep]], main = "RainGauges")
+  plot(HSAF.final[[common_timestep]], main = "H-SAF")
+  plot(GPM.final[[common_timestep]], main = "GPM-IMERG")
 }
 
 ```
 
-**Riassumendo**: mi trovo in input quattro campi georiferiti (rasters) con risoluzioni spaziali e temporali diverse, voglio ottenere in output quattro campi sulla stessa griglia e alla stessa risoluzione (cumulate orarie). Per farlo ho preparato una griglia sull'area dell'Italia e con passo omogeneo e ho predisposto una funzione che calcola le cumulate orarie.
+**Riassumendo**: mi trovo in input quattro campi georiferiti (rasters) con risoluzioni spaziali e temporali diverse, voglio ottenere in output quattro campi sulla stessa griglia e alla stessa risoluzione (cumulate orarie) in modo che sia possibile confrontarli punto per punto e istante per istante. Per farlo ho preparato una griglia che copre l'area dell'Italia con passo omogeneo, ho un poligono che segue i confiini nazionali con cui ritagliare le griglie e ho predisposto e applicato una funzione che calcola le cumulate orarie.
 
-### Salvataggio dei raster final
+### Salvataggio dei raster finali
+
+#### GeoTiff
+
+A questo punto posso salvare i rasters così ottenuti su un file esterno, in modo che siano velocemente recuperabili senza riprocessare i dati grezzi originali. Di questo si occupa la funzione writeRaster(). Il formato prescelto è il .TIFF, che è in realtà un formato immagine (anche le immagini sono dei rasters).
 
 ```{r}
 writeRaster(ERA5.final, paste0(resfolder, "ERA5_light.tif"), overwrite=TRUE )
@@ -933,7 +887,29 @@ writeRaster(HSAF.final, paste0(resfolder, "HSAF_light.tif"), overwrite=TRUE )
 
 ```
 
-Per leggere bisogna usare poi: `rast("nomefile")`
+#### NetCDF
+
+Più specifico del settore scientifico è il formato NetCDF (UNIDATA UCAR)[<https://www.unidata.ucar.edu/software/netcdf/>], predisposto anche per contenere più informazioni ausiliari che rendono l'interpretazione del file non ambigua. In questo caso uso la funzione `writeCDF()`.
+
+```{r}
+varName <- "avgrainrate"
+longName <- "hourly average precipitation rate in mm per hour"
+Unit <- "mm/h"
+
+writeCDF(ERA5.final, paste0(resfolder, "ERA5_light.nc"), overwrite=TRUE, 
+         varname=varName,  longname=longName, unit=Unit)
+writeCDF(RG.final, paste0(resfolder, "RG_light.nc"), overwrite=TRUE, 
+         varname=varName,  longname=longName, unit=Unit)
+writeCDF(GPM.final, paste0(resfolder, "GPM_light.nc"), overwrite=TRUE, 
+         varname=varName,  longname=longName, unit=Unit)
+writeCDF(HSAF.final, paste0(resfolder, "HSAF_light.nc"), overwrite=TRUE, 
+         varname=varName,  longname=longName, unit=Unit)
+
+```
+
+### Lettura di raster da file
+
+Per leggere dei files GeoTIFF o NetCDF bisogna usare semplicemente la funzione: `rast("nomefile")`. Importo i rasters di cinque giorni creati con lo script *dataProcessing_Esp3.R .*
 
 ```{r}
 ERA5 <- rast(paste0(resfolder, "ERA5_final.tif"))
@@ -943,32 +919,155 @@ HSAF <- rast(paste0(resfolder, "HSAF_final.tif"))
 
 ```
 
-## Analisi
+**ATTENZIONE!**: in HSAF mancano due ore nella giornata del 2 ottobre 2016.
+```{r}
+names(RG)[which(! names(RG) %in% names(HSAF))]
 
+new.times <- names(RG)[which(names(RG) %in% names(HSAF))]
 
-### Funzione per plot mappe
-
-TODO implementare + colors 
+```
+Per poter eseguire le analisi in modo omogeneo devo togliere queste due ore anche dagli altri prodotti. Nel caso il problema si presenti più spesso conviene creare un dataframe di supporto con tutti gli orari e trovare l'intersezione con `inner_join(..., by = DateTime)` come per l'Esperienza 1.
 
 ```{r}
-plotMap <- function(raster, layerNames){
-  colorscale <- c("blue","green","yellow","orange","red")
+RG   <-   RG[[new.times]]
+ERA5 <- ERA5[[new.times]] 
+GPM  <-  GPM[[new.times]] 
+```
+
+
+Ricreo le maschere su tutti i 5 giorni:
+```{r}
+ERA5.mask <- mask(ERA5 >= THR, ItalyBG)
+GPM.mask  <- mask(GPM  >= THR, ItalyBG)
+RG.mask   <- mask(RG   >= THR, ItalyBG)
+
+HSAF.mask <- mask(!is.na(HSAF), ItalyBG)
+
+```
+
+
+------------------------------------------------------------------------
+
+## Analisi
+
+Vediamo ora le specifiche dell'analisi dati con oggetti *raster*. 
+
+### Grafici esplorativi
+
+#### Istogrammi
+
+Così come per `plot()`, anche la funzione base `hist()` ha un [metodo specifico]{.underline} per oggetti *SpatRaster*: il secondo argomento è il nome del livello selezionato:
+
+```{r}
+hist(ERA5, common_timestep, xlab="Hourly average rain rate (mm/h)")
+```
+
+Posso utilizzare la funzione `clamp()` per mostrare la distribuzione dei soli valori al di sopra della soglia *THR*:
+
+```{r}
+hist(clamp(ERA5, THR, values=F), 
+     common_timestep, 
+     xlab="Hourly average rain rate (mm/h)")
+
+```
+
+Se non fornisco nessun argomento, gli istogrammi dei vari layers vengono giustapposti come nel caso delle mappe (fino a 16 elementi), diventando illeggibili:
+
+```{r}
+hist(clamp(ERA5, THR, values=F), xlab="AvgRR (mm/h)")
+```
+
+Per aggregare tutti i livelli assieme, devo accedere direttamente ai valori delle celle. Posso farlo con la funzione `values()` che restituisce la [matrice dei dati del raster]{.underline} (n celle x n livelli):
+
+```{r}
+dim(values(ERA5))
+```
+
+```{r}
+hist(values(clamp(ERA5, THR, values=F)), 
+     xlab="Hourly average rain rate (mm/h)",
+     main="ERA5 Precipitation | 01-05 October 2016 | Italy")
+```
+
+#### Scatterplots
+
+Anche gli scatterplot sono già predisposti per oggetti *SpatRaster*. Ovviamente viene garantita la corrispondenza cella per cella. A titolo di esempio dimostrativo delle funzioni grafiche mostriamo lo scatterplot tra due layers successivi di ERA5, in seguito confronteremo espressamente prodotti diversi.
+
+```{r, fig.asp=1, fig.width=4}
+plot(clamp(ERA5[[common_timestep]], THR, values=F),
+     clamp(ERA5[[which(names(ERA5)==common_timestep)+1]], THR, values=F), 
+     xlim=c(0,7), ylim=c(0,7), col = "navyblue")
+abline(a=0, b=1)
+```
+
+Per sfruttare le funzioni più avanzate di `ggplot()` è necessario tornare alla struttura dei data frames. Concatenando `values()` e `as.data.frame()` si ottiene un data frame con tante colonne quanti sono i livelli del raster. La funzione `geom_bin_2D()` effettua il binning dei dati in *x* e *y* e restituisce il conteggio in scala colore, che di seguito è impostata in scala logaritmica per gestire l'accumulo di dati vicino all'origine.
+
+```{r, fig.asp=1, fig.width=4}
+clamp(ERA5, THR, values=F) %>%
+  
+  values() %>%
+  as.data.frame() %>%
+  
+  ggplot(aes(`201610012100`, `201610012200`)) + 
+  geom_bin_2d(binwidth = 0.2) +
+  coord_fixed() + 
+  geom_abline(slope = 1, intercept = 0, alpha = 0.2) +
+  scale_fill_binned(type = "viridis", 
+                    trans = "log", 
+                    breaks = c(2, 5, 10, 25, 50, 100) #,
+                    # limits = c(0.1, 400)
+  ) +
+  # geom_smooth(method = "lm", color="red", linetype=2) + 
+  theme_bw()
+```
+
+
+
+### Mappe
+
+#### Singolo prodotto
+
+Per creare mappe di precipitazione più rifinte si costruisce una funzione dedicata.
+
+```{r, , fig.width=5, fig.height=5}
+plotSingleMap <- function(raster, layerNames){
+  
+  nCols <- ceiling(sqrt(length(layerNames)))
+  nRows <- ceiling(length(layerNames)/nCols)
+  par(mfrow=c(nRows, nCols))
+  
+  # list with details for legend
+  plg = list(
+    title = expression(bold("Average rain\n rate (mm/h)")),
+    title.cex = 0.7,
+    cex = 0.7,
+    shrink=0
+  )
+  
+  # margins: bottom, left, top, and right
+  mar = c(4.5, 4.5, 2.5, 3.8)
   
   for(lname in layerNames){
     rastLayer <- raster[[lname]]
     
     plot(
-      clamp(rastLayer, 0.2, values=F), 
-      main = ymd_hm(lname),
-      col  = colorscale,  
+      clamp(rastLayer, 0.1, values=F), 
+      main = paste(deparse(substitute(raster)), " - ", ymd_hm(lname)),
+      col  = rev(rainbow(295)[1:200]),  
       xlab = "Longitude (°E)",
       ylab = "Latitude (°N)",
+      xlim = MyGrid_extLON,
+      ylim = MyGrid_extLAT,
+      # range=c(0, 17),
+      plg  = plg,
+      mar  = mar,
       panel.first = {
         plot(
           crop(GlobalBG, MyGrid), 
           col="gray90", 
           add=T
         )
+        
         grid()
       }
     )
@@ -976,110 +1075,190 @@ plotMap <- function(raster, layerNames){
 }
 
 
+plotSingleMap(HSAF, common_timestep)
+
 ```
 
+
+#### Multi-prodotto
+
+Opzione base: costruisco un raster per un solo istante, con i quattro prodotti come livelli:
+
+```{r, fig.height=5, fig.width=6}
+
+r1 <- c(HSAF[[common_timestep]], GPM[[common_timestep]],
+        ERA5[[common_timestep]], RG[[common_timestep]])
+names(r1) <- c("HSAF", "GPM", "ERA5", "RG")
+
+plot(r1, range=c(0, 17), colNA="grey")
+
+```
+
+**Sperimentale**: utilizzo la suite `ggplot()` tramite il pacchetto `rasterVis`.  
+*Vantaggi*: migliore gestione degli spazi, scala colore unica per tutti senza bisogno di imporlo.
+*Manca*: gestione dei confini, la trasparenza dei valori NA.
+
+```{r}
+library(rasterVis)
+gplot(r1) + geom_tile(aes(x, y, fill = value)) +
+  facet_wrap(~ variable) +
+  scale_fill_gradientn(colours = rev(terrain.colors(225))) +
+  coord_equal() + 
+  labs(x = "Longitude (°E)",
+       y = "Latitude (°N)",
+       fill = "Average rain\n rate (mm/h)") + 
+  theme_bw()
+```
+
+
+
+Opzione in serie: propongo qui una funzione specifica per stampare immagini 2x2 con i quattro prodotti a confronto. I raster vanno forniti nell'ordine indicato.
+
+```{r, fig.height=9, fig.width=9}
+plotMultiMap <- function(HSAF, GPM, ERA5, RG, layerNames){
+  
+  nCols <- 2
+  nRows <- 2
+  par(mfrow=c(nRows, nCols))
+  
+  # list with details for legend
+  plg = list(
+    title = expression(bold("Average rain\n rate (mm/h)")),
+    title.cex = 0.7,
+    cex = 0.7,
+    shrink=0
+  )
+  
+  # margins: bottom, left, top, and right
+  mar = c(4.5, 4.5, 2.5, 3.8)
+  
+  for(lname in layerNames){
+    for(rname in c("HSAF", "GPM", "ERA5", "RG")){
+      raster <- get(rname)
+      rastLayer <- raster[[lname]]
+      
+      plot(
+        clamp(rastLayer, 0.1, values=F), 
+        main = paste(rname, " - ", ymd_hm(lname)),
+        col  = rev(rainbow(295)[1:200]),  
+        xlab = "Longitude (°E)",
+        ylab = "Latitude (°N)",
+        xlim = MyGrid_extLON,
+        ylim = MyGrid_extLAT,
+        range=c(0, 17),
+        plg  = plg,
+        mar = mar,
+        panel.first = {
+          plot(
+            crop(GlobalBG, MyGrid), 
+            col="gray90", 
+            add=T
+          )
+          
+          grid()
+        }
+      )
+    }
+  }
+}
+
+
+plotMultiMap(HSAF, GPM, ERA5, RG, common_timestep)
+```
+
+Salvo i files nel modo classico. Se inserisco tutto in un ciclo posso stampare le mappe 2x2 per tutti gli istanti. Uno script a parte si occuperà della cosa.
 ```{r}
 
-plotMap(HSAF, "201610012100")
-
-# !! I nomi degli assi rimangono fuori dal plot! Probelma del notebook probabilmente
-
-
 png(filename = paste0(figfolder, "test.png"),
-    width    = 480,
-    height   = 322,
-    units    = "px")
+    width    = 800,
+    height   = 800,
+    units    = "px", 
+    res      = 110)
 
-plotMap(HSAF, "201610012100")
+plotMultiMap(HSAF, GPM, ERA5, RG, common_timestep)
 
 dev.off()
 
 ```
 
-TODO Salvataggio immagini 2x2
+### Analisi su tutto il dataset
 
-## PDFs
-
-```{r}
-ERA5.data <- as.vector(values(ERA5.final))
-hist(ERA5.data)
-
-RG.data <- as.vector(values(RG.final))
-hist(RG.data)
-```
+Creo intanto una *tibble* di tutti i valori dei rasters aggregati. Ho perso le informazioni spaziali e temporali ma la corrispondenza 1:1 è conservata.
 
 ```{r}
 data <- tibble(
-  Raingauges = RG.data,
-  ERA5 = ERA5.data
-) %>% 
-  pivot_longer(
-    cols = c("Raingauges", "ERA5"),
-    names_to = "Product",
-    values_to = "Precipitation"
-  )
+  RainGauges = as.vector(values(clamp(RG, THR, values=F))),
+  ERA5 = as.vector(values(clamp(ERA5, THR, values=F))),
+  GPM = as.vector(values(clamp(GPM, THR, values=F))),
+  HSAF = as.vector(values(clamp(HSAF, THR, values=F)))
+)  %>% na.omit()
 
-data %>%
-  ggplot(aes(Precipitation, color = Product)) + 
-  geom_freqpoly(binwidth = 1) + 
-  scale_y_log10()
+data_CAT <- tibble(
+  RainGauges = as.vector(values(RG.mask)),
+  ERA5 = as.vector(values(ERA5.mask)),
+  GPM = as.vector(values(GPM.mask)),
+  HSAF = as.vector(values(HSAF.mask))
+) %>% na.omit()
 
 ```
 
-## Indicatori statistici
+#### PDF
+Dopo avere indicato nei grafici esplorativi come creare gli istogrammi dei valori dei rasters, viene mostrato qui un metodo per mettere le PDF dei vari prodotti a confronto tra loro. 
 
+Le linee delle PDF sono ottenute con la funzione `geom_freqpoly()` di `ggplot2`. L'elaborazione preliminare permette una sintassi concisa nella chiamata di plotting.
+
+**Nota tecnica**: gli accenti `` (tastiera US) si possono utiizzare per racchiudere un nome di variabile con caratteri non standard, tipo spazi, operazioni o parentesi (ad es. il nome della colonna "Precipitation (mm/h)" nella chiamata di ggplot).
+
+```{r, fig.height=4, fig.width=8}
+
+data %>% 
+  pivot_longer(
+    cols = c("RainGauges", "ERA5", "GPM", "HSAF"),
+    names_to = "Product",
+    values_to = "Precipitation (mm/h)"
+  ) %>%
+  ggplot(aes(`Precipitation (mm/h)`, color = Product)) + 
+  geom_freqpoly(binwidth = 0.5, size = 1, ) + 
+  scale_y_log10(limits = c(3, 40000)) + 
+  scale_x_continuous(limits = c(0, 30)) +
+  scale_color_jco() + 
+  theme_bw()
+
+```
+
+#### Indicatori statistici
+
+Si dichiara la stessa funzione introdotta nell'Esperienza 1 per gli **indicatori statistici continui**.
 ```{r}
 statsFun <- function(Var, Ref){
-  avgR  = mean(Ref)
-  SMP   = length(na.omit(Var))
-  COR   = cor(Var, Ref, use = "pairwise.complete.obs")
-  ME    = mean(Var - Ref, na.rm = T)
-  MAE   = mean(abs(Var - Ref), na.rm = T)
-  RMSE  = sqrt(mean((Var - Ref)^2, na.rm = T))
-  MAX   = max(Var, na.rm = T)
-  nME   = ME/avgR
-  nMAE  = MAE/avgR
-  CV    = RMSE/avgR
-  
+
+  avgR <- mean(Ref, na.rm=T)
+  SMP  <- length(na.omit(Var))
+  COR  <- cor(Var, Ref, use = "pairwise.complete.obs")
+  ME   <- mean(Var - Ref, na.rm = T)
+  MAE  <- mean(abs(Var - Ref), na.rm = T)
+  RMSE <- sqrt(mean((Var - Ref)^2, na.rm = T))
+  CV   <- RMSE/avgR
+  nME  <- ME/avgR
+  nMAE <- MAE/avgR
+  MAX  <- max(Var, na.rm = T)
+
   table <- data.frame(SMP, avgR, nME, nMAE, CV, COR, ME, MAE, RMSE, MAX)
   
   return(signif(table, 3))
+  
 }
 
-statsFun_continuous <- function(Var, Ref){
-  
-  # continuous
-  CC   <- signif(cor(data$Var, data$Ref, method = "pearson", use = "na.or.complete"), 2)
-  mean <- signif(mean(data$Ref, na.rm = T),2)
-  me   <- signif(mean(data$Var - data$Ref, na.rm = T), 2)
-  ME   <- signif(mean(data$Var - data$Ref, na.rm = T)/mean, 2)
-  mae  <- signif(mean(abs(data$Var - data$Ref), na.rm = T), 2)
-  MAE  <- signif(mean(abs(data$Var - data$Ref), na.rm = T)/mean, 2)
-  rmse <- signif(sqrt(mean((data$Var - data$Ref)^2, na.rm = T)), 2)
-  CV   <- signif(rmse/mean, 2)
-  SMP  <- nrow(na.omit(data))
-  R2   <- signif(CC^2, 2)
-  
-  
-  avgR  = mean(Ref)
-  SMP   = length(na.omit(Var))
-  COR   = cor(Var, Ref, use = "pairwise.complete.obs")
-  ME    = mean(Var - Ref, na.rm = T)
-  MAE   = mean(abs(Var - Ref), na.rm = T)
-  RMSE  = sqrt(mean((Var - Ref)^2, na.rm = T))
-  MAX   = max(Var, na.rm = T)
-  nME   = ME/avgR
-  nMAE  = MAE/avgR
-  CV    = RMSE/avgR
-  
-  table <- data.frame(SMP, avgR, nME, nMAE, CV, COR, ME, MAE, RMSE, MAX)
-  
-  return(signif(table, 3))
-}
+statsFun(data$HSAF, data$RainGauges)
+```
 
-statsFun_categorical <- function(Var, Ref){
+Sul modello di *statsFun*, viene costruita un'analoga funzione per gli **indicatori categorici**. In input non andranno i valori dei rasters ma delle maschere logiche costruite attorno a *THR*.
+```{r}
+statsFun_CAT <- function(Var, Ref){
+  cat = data.frame(Var = Var==1, 
+                   Ref = Ref==1)
+  
   xtab <- xtabs(~ Ref + Var, data = cat, na.action = "na.omit")
-  
   
   hits <- xtab['TRUE' ,'TRUE' ]  #[2,2]#
   crej <- xtab['FALSE','FALSE']  #[1,1]#
@@ -1089,7 +1268,7 @@ statsFun_categorical <- function(Var, Ref){
   FAR  <- fala/(hits + fala)
   BIAS <- (hits + fala)/(hits + miss)
   POD  <-  hits/(hits + miss)       
-  TS   <-  hits/(hits + miss + fala)  
+  CSI  <-  hits/(hits + miss + fala)  
   SMP  <- sum(xtab)
   
   ACC  <-  (hits + crej)/(hits + fala + miss + crej)
@@ -1098,27 +1277,35 @@ statsFun_categorical <- function(Var, Ref){
   rand <- (hits+miss)*(hits+fala)/SMP
   ETS  <- (hits - rand)/(hits + miss + fala - rand)
   
-  table <- data.frame(SMP, FAR, BIAS, POD, TS, ACC, POFD, ETS)
+  table <- data.frame(SMP, POD, FAR, BIAS, ETS, CSI, ACC, POFD)
   
-  return(signif(table, 3))
+  return(signif(table, 2))
 }
 
+statsFun_CAT(data_CAT$HSAF, data_CAT$RainGauges)
 
 ```
 
-## Scatterplots
 
-TODO
 
-```{r}
-tibble(RG.data,
-       ERA5.data) %>%
-  ggplot(aes(RG.data, ERA5.data)) +
-  geom_bin_2d(binwidth = 0.2) + 
-  # scale_fill_continuous(trans= "log") +
-  scale_fill_binned(type = "viridis", trans="log", breaks=c(1, 2, 5, 10, 25, 50, 100)) +
-  coord_fixed() + 
+#### Scatterplots
+
+Replico la chiamata testata nei grafici esplorativi, mettendo a confronto le colonne di *data*.
+
+```{r, fig.height= 6, fig.width=7}
+data %>%
+  ggplot(aes(RainGauges, HSAF)) +
+  geom_bin_2d(binwidth = 0.2) +
+  coord_fixed(xlim = c(0, 18),
+              ylim = c(0, 18)) + 
+  geom_abline(slope = 1, intercept = 0, alpha = 0.2) +
+  scale_fill_binned(type = "viridis", 
+                    trans = "log", 
+                    breaks = c(2, 5, 10, 25, 50, 100, 200)) +
   theme_bw()
-# aggiungere scala colore log
+
 
 ```
+
+
+

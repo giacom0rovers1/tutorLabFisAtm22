@@ -742,16 +742,16 @@ Calcolo correlazione e altre statistiche continue tramite una funzione che defin
 
 ```{r}
 statsFun <- function(Var, Ref){
-  avgR  = mean(Ref)
-  SMP   = length(na.omit(Var))
-  COR   = cor(Var, Ref, use = "pairwise.complete.obs")
-  ME    = mean(Var - Ref, na.rm = T)
-  MAE   = mean(abs(Var - Ref), na.rm = T)
-  RMSE  = sqrt(mean((Var - Ref)^2, na.rm = T))
-  MAX   = max(Var, na.rm = T)
-  nME   = ME/avgR
-  nMAE  = MAE/avgR
-  CV    = RMSE/avgR
+  avgR <- mean(Ref)
+  SMP  <- length(na.omit(Var))
+  COR  <- cor(Var, Ref, use = "pairwise.complete.obs")
+  ME   <- mean(Var - Ref, na.rm = T)
+  MAE  <- mean(abs(Var - Ref), na.rm = T)
+  RMSE <- sqrt(mean((Var - Ref)^2, na.rm = T))
+  MAX  <- max(Var, na.rm = T)
+  nME  <- ME/avgR
+  nMAE <- MAE/avgR
+  CV   <- RMSE/avgR
   
   table <- data.frame(SMP, avgR, nME, nMAE, CV, COR, ME, MAE, RMSE, MAX)
   

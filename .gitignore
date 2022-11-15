@@ -54,3 +54,6 @@ vignettes/*.pdf
 
 # Geotiff rasters
 *.tif
+
+# NetCDF rasters
+*.nc
