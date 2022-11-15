@@ -129,7 +129,7 @@ Gli oggetti di dati georiferiti nel pacchetto `terra` possono avere una **strutt
 
 I **rasters** possono avere varie matrici di dati "stratificate" una sull'altra: sono i cosiddetti *layers*. Queste matrici condividono la stessa geometria e geolocalizzazione spaziale. Possono rappresentare diverse variabili allo stesso istante temporale oppure ad esempio vari istanti temporali della stessa variabile. Sono insomma oggetti 3D vincolati su una griglia 2D.
 
-I *layers* di un *raster* possono essere richiamati tramite il loro nome (una stringa) o il loro indice (un numero), inseriti dentro **doppie parentesi quadre**, come per gli elementi di una lista. Agli elementi di un oggetto vettoriale o alle celle di un raster si accede invece con il loro indice dentro singole parentesi quadre, come per gli elementi di un vettore. Vedremo qualche esempio tra poco.
+I *layers* (o livelli) di un *raster* possono essere richiamati tramite il loro nome (una stringa) o il loro indice (un numero), inseriti dentro **doppie parentesi quadre**, come per gli elementi di una lista. Agli elementi di un oggetto vettoriale o alle celle di un raster si accede invece con il loro indice dentro singole parentesi quadre, come per gli elementi di un vettore. Vedremo qualche esempio tra poco.
 
 ### Confini nazionali
 
@@ -411,7 +411,7 @@ names(HSAF.raster) <- HSAF.times
 HSAF.raster
 ```
 
-# \>\>\>\>\>\> Sono arrrivato qui
+Vediamo il plot di un layer con sovrapposti i confini di tutti gli stati dell'area:
 
 ```{r}
 plot(HSAF.raster[["201610012057"]])
@@ -419,10 +419,10 @@ plot(GlobalBG, add=T)
 
 ```
 
--   Analisi
+Anche la funzione base hist() ha un metodo specifico per oggetti SpatRaster: il secondo argomento è il nome del livello selezionato:
 
 ```{r}
-hist(HSAF.raster, "201610012057")
+hist(HSAF.raster, "201610012057", xlab="Rain rate (mm/h)")
 
 ```
 
