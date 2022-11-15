@@ -123,6 +123,16 @@ CorrectionFactor_HSAF = 3600 # kg/m2*s --> mm/h
 CorrectionFactor_ERA5 = 1000 # m/h --> mm/h
 ```
 
+### Definizione della soglia Rain/noRain
+
+Trattando con **stime** di pioggia piuttosto che con **misure** dirette, i prodotti di precipitazione possono contenere valori numerici che, pur non essendo impossibili dal punto di vista fisico, non hanno significatività nel confronto con gli strumenti tradizionali e rischiano di inquinare l'analisi dati. Ad esempio: valori molto prossimi allo zero e più piccoli della minima sensibilità strumentale di un pluviometro.
+
+Imposto un valore minimo di intensità di pioggia "realistica". Userò questo valore sia per filtrare i dati, sia per svolgere le analisi categoriche (occorrenze sopra e sotto soglia):
+
+```{r}
+THR <- 0.1 # mm/h
+```
+
 ## Strutture dei dati spaziali
 
 Gli oggetti di dati georiferiti nel pacchetto `terra` possono avere una **struttura vettoriale** (punti, segmenti, [poligoni]{.underline}) o **matriciale** ([rasters]{.underline}, ovvero campi continui grigliati). Le strutture predisposte per questi tipi di dati sono rispettivamente `SpatVector` e `SpatRaster` (dove "spat" sta chiaramente per "spatial") e si creano con le chiamate `vect()` e `rast()`.
@@ -203,7 +213,7 @@ MyGrid
 
 Il raster così creato non contiene nessun dato, ma ha tutte le informazioni geometriche e geografiche necessarie per manipolare gli altri raster dei prodotti (che tra poco andremo a generare) in modo che acquistino una forma comune.
 
-## Import data
+## Acquisizione
 
 Inizio ora a importare i dati satellitari nell'ambiente di lavoro. L'obiettivo è, a prescindere dalla forma in cui sono disponibili, di riportarli all'interno di uno *SpatRaster*. La procedura di lettura da files binari o testuali è molto lenta e richiede una certa disponibilità di memoria. Una volta trasformati in rasters, i dati saranno accessibili molto più rapidamente e occuperanno meno spazio.
 
@@ -319,6 +329,115 @@ plot(ERA5.MyGrid[[c("201610012100")]])
 plot(ItalyBG, add =T)
 ```
 
+#### Filtri sul raster: clamp e maschere
+
+Se ho bisogno di un filtro rapido per eliminare i valori inferiori a una soglia, posso usare la funzione `clamp()` con l'opzione `values=F`. La utilizzo per portare rapidamente a NA eventuali valori strettamente minori di zero, che non hanno valore fisico:
+
+```{r}
+## Filter out negative values -------------------------------------------------
+ERA5.MyGrid <- clamp(ERA5.MyGrid, 0, values=F)
+```
+
+Posso usare la stessa funzione anche per eliminare velocemente i valori inferiori alla soglia *THR* che ho specificato all'inizio:
+
+```{r}
+plot(clamp(ERA5.MyGrid[["201610012100"]], THR, values=F))
+plot(ItalyBG, add =T)
+
+```
+
+Così facendo però **perdo l'informazione** sulle celle che avevano stimato valori di intensità validi ma sotto soglia, perché vado a confondere queste celle con quelle che erano già NA per dati non validi o fuori dal dominio. Per questo motivo è meglio creare una **maschera categorica** delle celle sopra (*TRUE*) e sotto (*FALSE*) il valore di soglia *THR*. Le celle non valide rimangono NA anche nella maschera.
+
+Creo la maschera applicando direttamente a tutto il raster la condizione di soglia:
+
+```{r}
+ERA5.mask <- ERA5.MyGrid >= THR
+
+plot(ERA5.mask[["201610012100"]])
+plot(ItalyBG, add =T)
+
+```
+
+Posso usare la maschera così ottenuta per filtrare i dati, con la funzione `mask()` . L'opzione `maskvalue=FALSE`che i valori che devono essere mascherati sono i *FALSE* della maschera. In questo caso ottengo lo stesso risultato della funzione `clamp()`:
+
+```{r}
+plot(mask(ERA5.MyGrid[["201610012100"]], 
+          ERA5.mask[["201610012100"]], 
+          maskvalue=FALSE))
+plot(ItalyBG, add =T)
+
+```
+
+Posso anche usare la maschera direttamente come input per l'analisi categorica (vedi dopo).
+
+Di base utilizzerò `clamp()` per esigenze grafiche (ad esempio per la trasparenza dei valori sotto soglia nelle mappe), per selezionare rapidamente dei sottoinsiemi del campo o per rimuovere i dati non fisici (tipo -9999), mentre userò la maschera per l'analisi statistica delle occorrenze sopra e sotto soglia.
+
+#### Istogrammi
+
+Anche la funzione base `hist()` ha un metodo specifico per oggetti *SpatRaster*: il secondo argomento è il nome del livello selezionato:
+
+```{r}
+hist(ERA5.MyGrid, 
+     "201610012100", 
+     xlab="Hourly average rain rate (mm/h)")
+```
+
+Posso utilizzare la funzione `clamp()` appena introdotta per mostrare la distribuzione dei soli valori al di sopra della soglia *THR*:
+
+```{r}
+hist(clamp(ERA5.MyGrid, THR, values=F), 
+     "201610012100", 
+     xlab="Hourly average rain rate (mm/h)")
+
+```
+
+Se non fornisco nessun argomento, gli istogrammi dei vari layers vengono giustapposti come nel caso delle mappe (fino a 16 elementi), diventando illeggibili:
+
+```{r}
+hist(clamp(ERA5.MyGrid, THR, values=F), xlab="AvgRR (mm/h)")
+```
+
+Per aggregare tutti i livelli assieme, devo accedere direttamente ai valori delle celle. Posso farlo con la funzione `values()` che restituisce la matrice dei dati del raster (n celle x n livelli):
+
+```{r}
+dim(values(ERA5.MyGrid))
+```
+
+```{r}
+hist(values(clamp(ERA5.MyGrid, THR, values=F)), 
+     xlab="Hourly average rain rate (mm/h)",
+     main="ERA5 Precipitation - 01 Oct. 2016")
+```
+
+#### Scatterplots
+
+Anche gli scatterplot sono già predisposti per oggetti SpatRaster. Ovviamente viene garantita la corrispondenza cella per cella. A titolo di esempio mostriamo lo scatterplot tra due layers successivi di ERA5, perché per confrontare prdodotti diversi dobbiamo prima completare il processo di omogeneizzazione delle risoluzioni spaziali e temporali (si veda dopo).
+
+```{r, fig.asp=1, fig.width=4}
+plot(clamp(ERA5.MyGrid[["201610012100"]], THR, values=F),
+     clamp(ERA5.MyGrid[["201610012200"]], THR, values=F), 
+     xlim=c(0,7), ylim=c(0,7), col = "navyblue")
+abline(a=0, b=1)
+```
+
+Per sfruttare le funzioni più avanzate di `ggplot()` invece è necessario tornare alla struttura dei data frames. Concatenando `values()` e `as.data.frame()` si ottiene un data frame con tante colonne quanti i livelli del raster. La funzione `geom_bin_2D()` effettua il binning dei dati in *x* e *y* e restituisce il conteggio in scala colore, che di seguito è impostata in scala logaritmica per gestire l'accumulo di dati vicino all'origine.
+
+```{r, fig.asp=1, fig.width=4}
+clamp(ERA5.MyGrid, THR, values=F) %>%
+  
+  values() %>%
+  as.data.frame() %>%
+  
+  ggplot(aes(`201610012100`, `201610012200`)) + 
+  geom_bin_2d(binwidth = 0.2) +
+  coord_fixed() + 
+  geom_abline(slope = 1, intercept = 0, alpha = 0.2) +
+  scale_fill_binned(type = "viridis", 
+                    trans = "log", 
+                    breaks = c(2, 5, 10, 25, 50, 100)) +
+  theme_bw()
+```
+
 ### B) H-SAF
 
 I dati H-SAF si trovano sempre dentro dei GRIB, ma la specifica del sistema di coordinate di riferimento non viene interpretato correttamente da `rast()`. Non avendo trovato online nessuna informazione sulla stringa CRS corretta, si sfruttano le coordinate della griglia fornite su un file a parte.
@@ -337,6 +456,8 @@ Il prodotto H-SAF ha dati a 15 minuti. I files presenti nella cartella sono uno 
 ## Assign Date ----------------------------------------------------------------
 HSAF.times <- paste0(substr(HSAF.files,5,12),substr(HSAF.files,14,17))
 ```
+
+#### Filtro sui nomi dei files in lettura
 
 La lettura di così tanti files è lenta. Inoltre leggere files che non verranno poi utilizzati riempie inutilmente la memoria RAM. Andiamo quindi ad effettuare la selezione temporale direttamente sull'array delle stringhe dei nomi dei files (e su quello degli intervalli temporali, che deve restare coerente coi files):
 
@@ -358,6 +479,8 @@ HSAF.coordinates <- read.table(file(paste0(datafolder,"SAT_coordinates.dat")),
                                as.is = TRUE, 
                                header = FALSE)
 ```
+
+#### Filtro sul data frame dei dati
 
 I files presenti nella cartella (uno per istante temporale) vengono letti con la funzione `readGDAL` del pacchetto `rgdal`, che riesce ad interpretare autonomamente i GRIB. La lettura avviene all'interno di un ciclo sui vari istanti temporali.
 
@@ -391,11 +514,11 @@ rownames(HSAF.df_ITA) <- 1:nrow(HSAF.df_ITA)
 HSAF.df_ITA[121784:121790 ,1:6]
 ```
 
+#### Rasterizzazione di un data frame
+
 E' arrivato il momento di trasportare i dati rimasti all'interno di un raster, ovver di "rasterizzarli". Non a caso la funzione da utilizzare si chiama `rasterize()`. Questa funzione assegna i valori forniti al parametro `values =`, relativi alle coordinate indicate dalla matrice al primo argomento, ovvero `cbind(HSAF.df_ITA$Lon, HSAF.df_ITA$Lat)`, ad una griglia che eredita le proprietà dal secondo argomento, ovvero *MyGrid*.
 
 Inizialmente viene creato un raster vuoto, *HSAF.raster,* ad immagine di *MyGrid* tramite il comando `rast(MyGrid)`. Gli vengono poi agganciati tanti layers quanti sono gli istanti temporali selezionati, tramite l'applicazoine ricorsiva della funzione `c()` , che combina il raster esistente con il nuovo layer appena creato da `rasterize(),` all'interno del ciclo `for()`.
-
-I nomi dei layers vengono poi posti uguali alle stringhe temporali a cui si riferiscono, rispettando la convenzione utilizzata per ERA5.
 
 ```{r}
 HSAF.raster <- rast(MyGrid)
@@ -407,11 +530,18 @@ for(i in 1:length(HSAF.times)){
                              values=as.array(HSAF.df_ITA[[HSAF.times[i]]])
                    ) * CorrectionFactor_HSAF)
 }
+```
+
+In questo caso non ho bisogno di riproiettare il raster su MyGrid perché ha ereditato le proprietà di MyGrid al momento della sua creazione.
+
+I nomi dei layers vengono poi posti uguali alle stringhe temporali a cui si riferiscono, rispettando la convenzione utilizzata per ERA5.
+
+```{r}
 names(HSAF.raster) <- HSAF.times
 HSAF.raster
 ```
 
-Vediamo il plot di un layer con sovrapposti i confini di tutti gli stati dell'area:
+Vediamo il plot di un layer con questa volta sovrapposti i confini di tutti gli stati dell'area:
 
 ```{r}
 plot(HSAF.raster[["201610012057"]])
@@ -419,121 +549,173 @@ plot(GlobalBG, add=T)
 
 ```
 
-Anche la funzione base hist() ha un metodo specifico per oggetti SpatRaster: il secondo argomento è il nome del livello selezionato:
+**ATTENZIONE**: il datase di H-SAF a quanto pare non contiene valori minori di 0.1 mm/h: dev'essere già stato filtrato da una soglia prima della nostra acquisizione.
 
 ```{r}
-hist(HSAF.raster, "201610012057", xlab="Rain rate (mm/h)")
+min(values(HSAF.raster), na.rm = T)
+```
 
+Devo usare una strategia diversa per costruire la maschera: assumo che non ci siano celle con stime non valide o mancanti ma che tutti i NA presenti siano stati valori sotto soglia.
+
+```{r}
+HSAF.mask <- !is.na(HSAF.raster)
+
+plot(HSAF.mask[["201610012057"]])
+plot(ItalyBG, add =T)
 ```
 
 ### C) GPM-IMERG
 
+Anque in questo caso i dati sono contenuti in matrici che si riferiscono a coordinate fornite esternamente. Si ripetono i passaggi di H-SAF, con qualche piccolo adattamento.
+
+Lettura dei nomi dei files e selezione:
+
 ```{r}
-# Search IMR files (ASCII) -----------------------------------------------------
+## Search IMR files (ASCII) ---------------------------------------------------
 GPM.files <- dir(GPM.folder, pattern=".imr")
 
-# TENGO SOLO IL PRIMO OTTOBRE QUI NEL NOTEBOOK
-GPM.files <- GPM.files[substr(GPM.files,5,8)=="1001"]
+## Assign Date ----------------------------------------------------------------
+GPM.times <- paste0(substr(GPM.files,1,8),substr(GPM.files,11,14))
 
-length(GPM.files)
+## Select only files inside the selected time interval -------------------------
+sel_idx <- which(ymd_hm(GPM.times) >= ymd_hm(sel_START) & 
+                   ymd_hm(GPM.times) <= ymd_hm(sel_END))
+GPM.files <- GPM.files[sel_idx]
+GPM.times <- GPM.times[sel_idx]
+```
 
-## Import data (Precipitation Rate [mm/h]) --------------------------------------
+Lettura delle matrici di dati (stavolta le salvo temporaneamente in una lista):
+
+```{r}
+## Import data (Precipitation Rate [mm/h]) ------------------------------------
 GPM.list <- list()
+
 for(i in 1:(length(GPM.files)) ) {
-  GPM.list[[i]] <- read.table(file(paste0(GPM.folder,GPM.files[i])), skip = 181, nrows = 180,
-                              sep = ",", na.string = NA, as.is = TRUE, header = FALSE)
+  GPM.list[[i]] <- read.table(file(paste0(GPM.folder,GPM.files[i])), 
+                              skip = 181, 
+                              nrows = 180,
+                              sep = ",", 
+                              na.string = NA, 
+                              as.is = TRUE, 
+                              header = FALSE)
+  
   GPM.list[[i]]  <- as.matrix(GPM.list[[i]][-1])
 }
+names(GPM.list) <- GPM.times
+```
 
-length(GPM.list)
-dim(GPM.list[[1]])
+Lettura delle coordinate della griglia originale (con qualche manipolazione per garantire la coerenza interna):
 
-## Import Coordinates (structured grid) -----------------------------------------
-LatGPM <- read.table(file(paste0(GPM.folder,GPM.files[1])), skip = 361, nrows = 1,
-                     sep = ",", na.string = NA, as.is = TRUE, header = FALSE)
+```{r}
+## Import Coordinates (structured grid) ---------------------------------------
+LatGPM <- read.table(file(paste0(GPM.folder,GPM.files[1])), 
+                     skip = 361, 
+                     nrows = 1,
+                     sep = ",", 
+                     na.string = NA, 
+                     as.is = TRUE, 
+                     header = FALSE)
 temp   <- LatGPM[[2]]
 for(i in 3:length(LatGPM)) temp[i-1] <- LatGPM[[i]]
 LatGPM <- temp
 
-LonGPM <- read.table(file(paste0(GPM.folder,GPM.files[1])), skip = 362, nrows = 1,
-                     sep = ",", na.string = NA, as.is = TRUE, header = FALSE)
+LonGPM <- read.table(file(paste0(GPM.folder,GPM.files[1])), 
+                     skip = 362, 
+                     nrows = 1,
+                     sep = ",", 
+                     na.string = NA, 
+                     as.is = TRUE, 
+                     header = FALSE)
 temp   <- LonGPM[[2]]
 for(i in 3:length(LonGPM)) temp[i-1] <- LonGPM[[i]]
 LonGPM <- temp
 
-c(length(LonGPM),length(LatGPM))
-
-
 GPM.coordinates <- 0
 for(i in LonGPM) for(j in LatGPM) GPM.coordinates <- c(GPM.coordinates,i,j)
+GPM.coordinates <- t(matrix(GPM.coordinates[-1], 2, length(LonGPM)*length(LatGPM)))
 ```
 
-```{r}
-# Data extraction
-GPM.coordinates2 <- t(matrix(GPM.coordinates[-1], 2, length(LonGPM)*length(LatGPM)))
-
-## Assign Date ------------------------------------------------------------------
-GPM.times <- paste0(substr(GPM.files,1,8),substr(GPM.files,11,14))
-GPM.times [c(1,length(GPM.times))]
-
-names(GPM.list) <- GPM.times
-```
+Rasterizzazione su una geometria ereditata da MyGrid e assegnazione dei nomi dei livelli:
 
 ```{r}
+## Create SpatRaster object from MyGrid ---------------------------------------
 GPM.raster <- rast(MyGrid)
+
+## Rasterize data over SpatRaster object (layr by layer) ----------------------
 for(i in 1:length(GPM.times)){
-  GPM.raster <- c(GPM.raster, rasterize(GPM.coordinates2, MyGrid, values=as.array(t(GPM.list[[GPM.times[i]]]))))
+  GPM.raster <- c(GPM.raster, 
+                  rasterize(GPM.coordinates, 
+                            MyGrid, 
+                            values=as.array(t(GPM.list[[GPM.times[i]]]))))
 }
+
+## Set layer names ------------------------------------------------------------
 names(GPM.raster) <- GPM.times
+```
+
+Rimozione di eventuali valori negativi:
+
+```{r}
+## Filter out negative values -------------------------------------------------
 GPM.raster <- clamp(GPM.raster, 0, values=F)
+
 
 GPM.raster
 ```
 
+Plot di esempio:
+
 ```{r}
-plot(GPM.raster[["201610012100"]])
-plot(GlobalBG, add =T) #, col = "grey85")
-# ItalyBGfun(NULL, "red")
+plot(clamp(GPM.raster[["201610012100"]], THR, values=F))
+plot(GlobalBG, add =T)
 
 ```
 
 ### D) RAIN GAUGES
 
+Di nuovo, i dati sono contenuti in matrici che si riferiscono a coordinate fornite esternamente. Si ripetono i passaggi di H-SAF e GPM-IMERG, con poche modifiche per gestire i dati, che in questo caso sono salvati dentro files binari con "parole" di quattro bytes (che è stato un formato standard per molti anni).
+
 ```{r}
-# Search DAT files -------------------------------------------------------------
+## Search DAT files -----------------------------------------------------------
 RG.files <- dir(RG.folder, pattern=".dat")
 
-# TENGO SOLO IL PRIMO OTTOBRE QUI NEL NOTEBOOK
-RG.files <- RG.files[substr(RG.files,5,8)=="1001"]
-
-length(RG.files)
-
-## Assign Date ------------------------------------------------------------------
+## Assign Date ----------------------------------------------------------------
 RG.times <- substr(RG.files,1,12)
-RG.times[c(1,length(RG.times)-1)]
 
-## Import Pixel Coordinates (unstructured grid) ---------------------------------
+## Select only files inside the selected time interval -------------------------
+sel_idx <- which(ymd_hm(RG.times) >= ymd_hm(sel_START) & 
+                   ymd_hm(RG.times) <= ymd_hm(sel_END))
+RG.files <- RG.files[sel_idx]
+RG.times <- RG.times[sel_idx]
+
+## Import Pixel Coordinates (unstructured grid) -------------------------------
 RG.coordinates <- read.table(file(paste0(datafolder, "PLV_coordinates.dat")),
                              sep = "", na.string = NA, as.is = TRUE, header = FALSE,
                              col.names = c("x","y","lat","lon"))
 
-# trasformazioni necessarie ma ignote (non sappiamo l'origine dei dati)
-# probabilmente sono stati salvati con una diversa convenzione di lettura di matrice
+# Transformations for consistent data indexing
 RG.coordinates$x <- rev(RG.coordinates$x)
 RG.coordinates <- RG.coordinates %>% arrange(x, y)
 
-## Import data (Precipitation Rate [mm/h]) --------------------------------------
+## Import data (Precipitation Rate [mm/h]) ------------------------------------
 nROW <- 444
 nCOL <- 912
 RG.df <- data.frame(matrix(ncol = 0, nrow = nROW*nCOL))
+
+
 for(i in 1:(length(RG.files)) ) {
   tt <- RG.times[i]
-  RG.df <- cbind(RG.df, readBin(paste0(RG.folder,RG.files[i]), "numeric", nROW*nCOL, size=4))  }
-
+  RG.df <- cbind(RG.df, readBin(paste0(RG.folder,RG.files[i]), 
+                                "numeric", 
+                                nROW*nCOL, 
+                                size=4))
+}
 colnames(RG.df) <- RG.times
 
+# Create support data frame with coordinates and id (used for filtering)
 latlon <- tibble(id = 1:nrow(RG.coordinates), RG.coordinates[c("lon", "lat")])
 
+## Restrict domain to Mediterranean area (bulk) -------------------------------
 latlon <- latlon %>% filter(
   lat >= 35,
   lat <= 50,
@@ -541,17 +723,21 @@ latlon <- latlon %>% filter(
   lon <= 25
 )
 
-
+## Create SpatRaster object from MyGrid ---------------------------------------
 RG.raster <- rast(MyGrid)
-for(i in 1:length(RG.times)){
-  RG.raster <- c(RG.raster, rasterize(cbind(latlon$lon, latlon$lat), 
-                                      MyGrid, 
-                                      values=RG.df[latlon$id,i]))
-}
-names(RG.raster) <- RG.times
-```
 
-```{r}
+## Rasterize data over SpatRaster object (layr by layer) ----------------------
+for(i in 1:length(RG.times)){
+  RG.raster <- c(RG.raster, 
+                 rasterize(cbind(latlon$lon, latlon$lat), 
+                           MyGrid, 
+                           values=RG.df[latlon$id,i]))
+}
+
+## Set layer names ------------------------------------------------------------
+names(RG.raster) <- RG.times
+
+## Filter out negative values -------------------------------------------------
 RG.raster <- clamp(RG.raster, 0, values=F)
 RG.raster
 
@@ -565,7 +751,10 @@ plot(ItalyBG, add =T) #, col = "grey85")
 
 ```
 
-## Dominio spaziale omogeneo (Italia in questo caso)
+
+## Elaborazione 
+
+### Dominio spaziale omogeneo (Italia in questo caso)
 
 mask (per avere base spaziale comune)
 
@@ -575,7 +764,7 @@ plot(mask(ERA5.MyGrid[["201610012100"]], ItalyBG))
 
 ```
 
-## **NEW** Funzione media oraria
+### Funzione media oraria
 
 ```{r}
 hourlyMean <- function(IN.raster, sel.times){
@@ -627,20 +816,6 @@ hourlyMean <- function(IN.raster, sel.times){
 
 ```
 
-## **NEW** Selezione di un intervallo comune (raster orari)
-
-seleziono il primo giorno (light per NOTEBOOK)
-
-```{r}
-# Define time interval (between 1 October and 30 November 2016)
-sel_START <- "201610010000"
-sel_END   <- "201610012300"
-
-sel.times <- format(seq(ymd_hm(sel_START)+hours(1), 
-                        ymd_hm(sel_END), 
-                        by="1 hour"), "%Y%m%d%H%M")
-
-```
 
 ```{r}
 ERA5.final <- mask(ERA5.MyGrid[[sel.times]], ItalyBG)
@@ -653,7 +828,7 @@ RG.final
 
 ```
 
-## **NEW** Aggregazione: medie orarie
+### Aggregazione: medie orarie
 
 ```{r}
 GPM.hourly <- hourlyMean(GPM.raster, sel.times)
@@ -677,7 +852,7 @@ plot(GPM.final[["201610012100"]], main = "GPM-IMERG")
 
 **Riassumendo**: mi trovo in input quattro campi georiferiti (rasters) con risoluzioni spaziali e temporali diverse, voglio ottenere in output quattro campi sulla stessa griglia e alla stessa risoluzione (cumulate orarie). Per farlo ho preparato una griglia sull'area dell'Italia e con passo omogeneo e ho predisposto una funzione che calcola le cumulate orarie.
 
-## SALVATAGGIO DEI RASTER "FINAL"
+### Salvataggio dei raster final
 
 ```{r}
 writeRaster(ERA5.final, paste0(resfolder, "ERA5_light.tif"), overwrite=TRUE )
@@ -697,9 +872,12 @@ HSAF <- rast(paste0(resfolder, "HSAF_final.tif"))
 
 ```
 
-## NEWE plot mappe più curato
+## Analisi
 
-TODO implementare + colors \### **NEW** Funzione per plot mappe
+
+### Funzione per plot mappe
+
+TODO implementare + colors 
 
 ```{r}
 plotMap <- function(raster, layerNames){
@@ -747,7 +925,7 @@ dev.off()
 
 ```
 
-TODO \### **NEW** Salvataggio immagini 2x2
+TODO Salvataggio immagini 2x2
 
 ## PDFs
 
@@ -777,7 +955,7 @@ data %>%
 
 ```
 
-## **NEW** Indicatori statistici
+## Indicatori statistici
 
 ```{r}
 statsFun <- function(Var, Ref){
@@ -866,6 +1044,8 @@ tibble(RG.data,
        ERA5.data) %>%
   ggplot(aes(RG.data, ERA5.data)) +
   geom_bin_2d(binwidth = 0.2) + 
+  # scale_fill_continuous(trans= "log") +
+  scale_fill_binned(type = "viridis", trans="log", breaks=c(1, 2, 5, 10, 25, 50, 100)) +
   coord_fixed() + 
   theme_bw()
 # aggiungere scala colore log
