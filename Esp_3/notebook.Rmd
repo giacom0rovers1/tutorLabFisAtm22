@@ -193,7 +193,7 @@ Imposto manualmente le proprietà della griglia: mi posiziono sull'Italia con ri
 ```{r}
 # Select properties of the common grid ("MyGrid"):
 MyGrid_res = 0.1
-MyGrid_extLON = c(0, 25)
+MyGrid_extLON = c( 5, 20)
 MyGrid_extLAT = c(35, 50)
 ```
 
@@ -212,6 +212,29 @@ MyGrid
 ```
 
 Il raster così creato non contiene nessun dato, ma ha tutte le informazioni geometriche e geografiche necessarie per manipolare gli altri raster dei prodotti (che tra poco andremo a generare) in modo che acquistino una forma comune.
+
+### Bounding box
+Per comodità di visualizzazione, creo un poligono che segua i margini della griglia *MyGrid* (ovvero la sua estensione, o la sua bounding box).
+```{r}
+bbox.lonlat <- cbind(
+  id = 1, 
+  part = 1, 
+  lon = c(MyGrid_extLON, rev(MyGrid_extLON)), 
+  lat = c(rep(MyGrid_extLAT[1], 2), rep(MyGrid_extLAT[2], 2))
+)
+bbox.lonlat
+
+```
+```{r}
+bbox.polyg <- vect(bbox.lonlat, type="polygons")
+bbox.polyg
+```
+```{r}
+plot(GlobalBG, xlim=c(0,30), ylim=c(33,52))
+plot(ItalyBG, col="grey", add=T)
+plot(bbox.polyg, add=T, border="red", lwd=2)
+```
+
 
 ## Acquisizione
 
@@ -320,13 +343,15 @@ I valori sono stati assegnati alle nuove celle tramite **interpolazione bilinear
 Se plotto i due rasters uno accanto all'altro (impostanto `mfrow = c(1,2)` con la funzione `par()`), noto sia l'aumento di risoluzione, sia l'ingrandimento dell'estensione della griglia (anche detta *bounding box*, o *bbox*):
 
 ```{r}
-par(mfrow = c(1,2))
-
-plot(ERA5.raster[["201610012100"]])
-plot(ItalyBG, add =T)
-
-plot(ERA5.MyGrid[[c("201610012100")]])
-plot(ItalyBG, add =T)
+{
+  par(mfrow = c(1,2))
+  
+  plot(ERA5.raster[["201610012100"]])
+  plot(ItalyBG, add =T)
+  
+  plot(ERA5.MyGrid[[c("201610012100")]])
+  plot(ItalyBG, add =T)
+}
 ```
 
 #### Filtri sul raster: clamp e maschere
@@ -505,10 +530,10 @@ Viene creato un *data frame* con colonne per Lon, Lat e per ogni istante tempora
 ```{r}
 
 HSAF.df_ITA <- HSAF.df %>% filter(
-  Lon >= 0,
-  Lon <= 30,
-  Lat >= 30,
-  Lat <= 60
+  Lon >= 5,
+  Lon <= 20,
+  Lat >= 35,
+  Lat <= 50
 ) 
 rownames(HSAF.df_ITA) <- 1:nrow(HSAF.df_ITA)
 HSAF.df_ITA[121784:121790 ,1:6]
@@ -546,6 +571,7 @@ Vediamo il plot di un layer con questa volta sovrapposti i confini di tutti gli 
 ```{r}
 plot(HSAF.raster[["201610012057"]])
 plot(GlobalBG, add=T)
+plot(bbox.polyg, add=T, border="red", lwd=2)
 
 ```
 
@@ -670,8 +696,19 @@ plot(clamp(GPM.raster[["201610012100"]], THR, values=F))
 plot(GlobalBG, add =T)
 
 ```
+Generazione della maschera:
+```{r}
+GPM.mask <- GPM.raster >= THR
 
-### D) RAIN GAUGES
+plot(GPM.mask[["201610012100"]])
+plot(ItalyBG, add =T)
+```
+
+
+
+### D) RainGauges
+
+I pluviometri interpolati (con un Kriging) saranno il riferimento per l'analisi degli altri tre prodotti.
 
 Di nuovo, i dati sono contenuti in matrici che si riferiscono a coordinate fornite esternamente. Si ripetono i passaggi di H-SAF e GPM-IMERG, con poche modifiche per gestire i dati, che in questo caso sono salvati dentro files binari con "parole" di quattro bytes (che è stato un formato standard per molti anni).
 
@@ -719,8 +756,8 @@ latlon <- tibble(id = 1:nrow(RG.coordinates), RG.coordinates[c("lon", "lat")])
 latlon <- latlon %>% filter(
   lat >= 35,
   lat <= 50,
-  lon >= 0,
-  lon <= 25
+  lon >= 5,
+  lon <= 20
 )
 
 ## Create SpatRaster object from MyGrid ---------------------------------------
@@ -742,6 +779,7 @@ RG.raster <- clamp(RG.raster, 0, values=F)
 RG.raster
 
 ```
+Si noti come il dominio dei pluviometri interpolati è esteso (ragionevolmente) alla sola terraferma. Bisognerà filtrare allora il mare anche dagli altri prodotti per ottenere un confronto coerente.
 
 ```{r}
 plot(RG.raster[["201610012100"]])
@@ -750,21 +788,26 @@ plot(ItalyBG, add =T) #, col = "grey85")
 
 
 ```
-
-
-## Elaborazione 
-
-### Dominio spaziale omogeneo (Italia in questo caso)
-
-mask (per avere base spaziale comune)
-
+Generazione della maschera:
 ```{r}
-plot(mask(ERA5.MyGrid[["201610012100"]], ItalyBG))
+RG.mask <- RG.raster >= THR
 
-
+plot(RG.mask[["201610012100"]])
+plot(ItalyBG, add =T)
 ```
 
-### Funzione media oraria
+## Elaborazione 
+Ci troviamo con quattro rasters che a questo punto condividono già la stessa griglia, ma le risoluzioni temporali non sono ancora omogenee. Inoltre hanno le celle popolate con logiche diverse al loro interno (dati sul mare, dati solo sulla terraferma, ecc...).
+
+
+
+### Aggregazione temporale: medie orarie
+Il primo problema riguarda H-SAF (risoluzione: 15min) e GPM-IMERG (risoluzione: 30min). Si vogliono aggregare i livelli in medie orarie. Viene preparata una funzione che si occupi del compito, personalizzata sulle strutture dati in uso.
+
+#### Funzione hourlyMean
+La funzione richiede in input il raster da aggregare ("IN.raster") e il vettore degli istanti temporali per i quali calcolare la media oraria ("sel.times"). Non è necessario che ci sia alcuna relazione tra i tempi dei livelli del raster e gli istanti selezionati (come nel caso di H-SAF, dove gli intervalli non cadono sulle ore piene). L'unico requisito è che la risoluzione temporale in input non sia più frequente del minuto.
+
+Il raster in output ("OUT.raster") eredita tutte le proprietà geometriche dal raster in input. Il vettore "interval" contiene ricorsivamente tutti i minuti dell'ora che termina con ognuno dei "sel.times". Qualunque livello in input il cui timestamp coincida con uno dei 60 minuti di "interval" viene mediato nel layer di output. Se nessun layer è presente, l'ora viene saltata e non comparirà nei layers di "OUT.raster". I layer vengono agganciati ricorsivamente ad "OUT.raster" e infine rinominati con i loro timestamps.
 
 ```{r}
 hourlyMean <- function(IN.raster, sel.times){
@@ -780,11 +823,6 @@ hourlyMean <- function(IN.raster, sel.times){
   # Create empty objects
   OUT.raster <- rast(IN.raster)
   OUT.times  <- character() 
-  
-  # Progress bar
-  bar <- progress_bar$new(format = "  :what [:bar] :current/:total (:percent) eta: :eta | :elapsedfull",
-                          total = length(sel.times),
-                          clear = FALSE)
   
   # Loop through requested time intervals
   for(tim in sel.times){
@@ -802,8 +840,6 @@ hourlyMean <- function(IN.raster, sel.times){
       OUT.raster <- c(OUT.raster, mean(IN.raster[[idx]]))
       OUT.times  <- c(OUT.times, tim)
     }
-    
-    bar$tick(tokens = list(what = "hourly mean "))
   }
   
   # Set layer names
@@ -813,9 +849,40 @@ hourlyMean <- function(IN.raster, sel.times){
   return(OUT.raster) 
 }
 
-
 ```
 
+Applico la funzinoe a "GPM.raster"...
+```{r}
+GPM.hourly <- hourlyMean(GPM.raster, sel.times)
+GPM.hourly
+```
+... e a "HSAF.raster". Notare che il numero di layer ora è lo stesso.
+
+```{r}
+HSAF.hourly <- hourlyMean(HSAF.raster, sel.times)
+HSAF.hourly
+```
+
+
+
+
+### Dominio spaziale omogeneo
+Si sfrutta nuovamente la funzione mask(), ma questa volta come maschera non si fornisce un raster logico (TRUE/FALSE) bensì un poligono, nello specifico i confini nazionali italiani. La funzione conserva intatte le celle all'interno del perimetro del poligono, mentre rigetta (NA) quelle al di fuori di esso.
+
+Tramite plot() vediamo il raster prima (sx) e dopo (dx) la maschera: i valori uguali a zero (grigio chiaro) disegnano il profilo dell'Italia, mentre gli NA sono bianchi (la differenza può essere più o meno evidente in base alle caratteristiche di gamma del proprio schermo).
+
+```{r}
+{
+  par(mfrow=c(1,2))
+  plot(ERA5.MyGrid[["201610012100"]])
+  plot(bbox.polyg, add=T, border="red", lwd=2)
+  
+  plot(mask(ERA5.MyGrid[["201610012100"]], ItalyBG))
+  plot(bbox.polyg, add=T, border="red", lwd=2)
+}
+
+```
+Applico la maschera direttamente a ERA5 e RainGauges, che sono già a risoluzione oraria.
 
 ```{r}
 ERA5.final <- mask(ERA5.MyGrid[[sel.times]], ItalyBG)
@@ -828,25 +895,29 @@ RG.final
 
 ```
 
-### Aggregazione: medie orarie
+
+
 
 ```{r}
-GPM.hourly <- hourlyMean(GPM.raster, sel.times)
 GPM.final  <- mask(GPM.hourly, ItalyBG)
 GPM.final
+```
 
-HSAF.hourly <- hourlyMean(HSAF.raster, sel.times)
+
+```{r}
 HSAF.final  <- mask(HSAF.hourly, ItalyBG)
 HSAF.final
 
 ```
 
 ```{r}
-par(mfrow=c(2,2))
-plot(ERA5.final[["201610012100"]], main = "ERA5")
-plot(RG.final[["201610012100"]], main = "RainGauges")
-plot(HSAF.final[["201610012100"]], main = "H-SAF")
-plot(GPM.final[["201610012100"]], main = "GPM-IMERG")
+{
+  par(mfrow=c(2,2))
+  plot(ERA5.final[["201610012100"]], main = "ERA5")
+  plot(RG.final[["201610012100"]], main = "RainGauges")
+  plot(HSAF.final[["201610012100"]], main = "H-SAF")
+  plot(GPM.final[["201610012100"]], main = "GPM-IMERG")
+}
 
 ```
 
