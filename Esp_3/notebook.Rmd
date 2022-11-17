@@ -1,5 +1,5 @@
 ---
-title: "Precipitation processing with tidyverse - R Notebook"
+title: "Precipitation processing with terra - R Notebook"
 output: html_notebook
 ---
 
