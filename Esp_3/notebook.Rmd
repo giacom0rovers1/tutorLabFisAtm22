@@ -45,7 +45,8 @@ packages <- c(
   "terra",
   "rgdal",
   "ncdf4",
-  "ggsci"
+  "ggsci",
+  "rasterVis"
 )
 
 for(pkg in packages){
@@ -1096,7 +1097,6 @@ plot(r1, range=c(0, 17), colNA="grey")
 *Vantaggi*: migliore gestione degli spazi, scala colore unica per tutti senza bisogno di imporlo. *Manca*: gestione dei confini, la trasparenza dei valori NA.
 
 ```{r}
-library(rasterVis)
 gplot(r1) + geom_tile(aes(x, y, fill = value)) +
   facet_wrap(~ variable) +
   scale_fill_gradientn(colours = rev(terrain.colors(225))) +
