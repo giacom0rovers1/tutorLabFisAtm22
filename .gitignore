@@ -60,3 +60,11 @@ vignettes/*.pdf
 
 # QGis files
 *.qgz
+
+# Shapefiles
+*.shp
+*.shx
+*.prj
+*.dbf
+*.xml
+*.cpg
