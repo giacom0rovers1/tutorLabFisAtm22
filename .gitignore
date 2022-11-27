@@ -47,7 +47,7 @@ vignettes/*.pdf
 *.png
 
 # Data Archives
-*.RData
+*.RData*
 
 # LibreOffice cache
 .~lock*
@@ -57,3 +57,6 @@ vignettes/*.pdf
 
 # NetCDF rasters
 *.nc
+
+# QGis files
+*.qgz
