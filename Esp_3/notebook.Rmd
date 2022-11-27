@@ -105,7 +105,7 @@ Scelgo gli istanti di inizio e fine dell'intervallo temporale che voglio analizz
 
 ```{r}
 # Define time interval (between 1 October and 30 November 2016)
-sel_START <- "201610010000"
+sel_START <- "201610011200"
 sel_END   <- "201610012300"
 ```
 
@@ -1265,10 +1265,10 @@ statsFun_CAT <- function(Var, Ref){
   
   xtab <- xtabs(~ Ref + Var, data = cat, na.action = "na.omit")
   
-  hits <- xtab['TRUE' ,'TRUE' ]  #[2,2]#
-  crej <- xtab['FALSE','FALSE']  #[1,1]#
-  miss <- xtab['TRUE' ,'FALSE']  #[2,1]#
-  fala <- xtab['FALSE','TRUE' ]  #[1,2]#
+  hits <- as.double(xtab['TRUE' ,'TRUE' ])  #[2,2]#
+  crej <- as.double(xtab['FALSE','FALSE'])  #[1,1]#
+  miss <- as.double(xtab['TRUE' ,'FALSE'])  #[2,1]#
+  fala <- as.double(xtab['FALSE','TRUE' ])  #[1,2]#
   
   FAR  <- fala/(hits + fala)
   BIAS <- (hits + fala)/(hits + miss)
