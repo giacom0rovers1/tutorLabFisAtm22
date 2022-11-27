@@ -1,0 +1,53 @@
+fig.width
+fig.caption
+
+[link appearence] (link "link title")
+
+ (mask esegue il ritaglio che segue i bordi, mentre crop prende la bounding box)
+ 
+ HSAF.raster <- clamp(HSAF.raster, 0, values=F)
+
+
+
+
+plotMap <- function(raster, layerNames){
+
+  nCols <- ceiling(sqrt(length(layerNames)))
+  nRows <- ceiling(length(layerNames)/nCols)
+  par(mfrow=c(nRows, nCols))
+  
+  # list with details for legend
+  plg = list(
+        title = expression(bold("Average rain\n rate (mm/h)")),
+        title.cex = 0.7,
+        cex = 0.7,
+        shrink=0
+      )
+
+  for(lname in layerNames){
+    rastLayer <- raster[[lname]]
+    
+    plot(
+      clamp(rastLayer, 0.1, values=F), 
+      main = paste(ifelse(nchar(lname)==12, ymd_hm(lname), lname),
+                   " - ",
+                   deparse(substitute(raster))), 
+      col  = rev(rainbow(295)[1:200]),  
+      xlab = "Longitude (°E)",
+      ylab = "Latitude (°N)",
+      xlim = MyGrid_extLON,
+      ylim = MyGrid_extLAT,
+      plg  = plg,
+      las  = 1,
+      panel.first = {
+        plot(
+          crop(GlobalBG, MyGrid), 
+          col="gray90", 
+          add=T
+        )
+  
+        grid()
+      }
+    )
+  }
+}
