@@ -1235,7 +1235,7 @@ Si dichiara la stessa funzione introdotta nell'Esperienza 1 per gli **indicatori
 
 ```{r}
 statsFun <- function(Var, Ref){
-
+  
   avgR <- mean(Ref, na.rm=T)
   SMP  <- length(na.omit(Var))
   COR  <- cor(Var, Ref, use = "pairwise.complete.obs")
@@ -1246,7 +1246,7 @@ statsFun <- function(Var, Ref){
   nME  <- ME/avgR
   nMAE <- MAE/avgR
   MAX  <- max(Var, na.rm = T)
-
+  
   table <- data.frame(SMP, avgR, nME, nMAE, CV, COR, ME, MAE, RMSE, MAX)
   
   return(round(table, 2))
@@ -1264,27 +1264,32 @@ statsFun_CAT <- function(Var, Ref){
                    Ref = Ref==1)
   
   xtab <- xtabs(~ Ref + Var, data = cat, na.action = "na.omit")
-  
-  hits <- as.double(xtab['TRUE' ,'TRUE' ])  #[2,2]#
-  crej <- as.double(xtab['FALSE','FALSE'])  #[1,1]#
-  miss <- as.double(xtab['TRUE' ,'FALSE'])  #[2,1]#
-  fala <- as.double(xtab['FALSE','TRUE' ])  #[1,2]#
-  
-  FAR  <- fala/(hits + fala)
-  BIAS <- (hits + fala)/(hits + miss)
-  POD  <-  hits/(hits + miss)       
-  CSI  <-  hits/(hits + miss + fala)  
   SMP  <- sum(xtab)
+
+  if(all(dim(xtab) == c(2,2))){
+    hits <- as.double(xtab['TRUE' ,'TRUE' ])  #[2,2]#
+    crej <- as.double(xtab['FALSE','FALSE'])  #[1,1]#
+    miss <- as.double(xtab['TRUE' ,'FALSE'])  #[2,1]#
+    fala <- as.double(xtab['FALSE','TRUE' ])  #[1,2]#
+    
+    FAR  <- fala/(hits + fala)
+    BIAS <- (hits + fala)/(hits + miss)
+    POD  <-  hits/(hits + miss)       
+    CSI  <-  hits/(hits + miss + fala)  
+    
+    ACC  <-  (hits + crej)/(hits + fala + miss + crej)
+    POFD <- fala/(fala + crej) 
+    
+    rand <- (hits+miss)*(hits+fala)/SMP
+    ETS  <- (hits - rand)/(hits + miss + fala - rand)
+    
+    table <- data.frame(SMP, POD, FAR, BIAS, ETS, CSI, ACC, POFD)
+    
+    return(round(table, 2))
+  }else{
+    return(data.frame(SMP, POD=NA, FAR=NA, BIAS=NA, ETS=NA, CSI=NA, ACC=NA, POFD=NA))
+  }
   
-  ACC  <-  (hits + crej)/(hits + fala + miss + crej)
-  POFD <- fala/(fala + crej) 
-  
-  rand <- (hits+miss)*(hits+fala)/SMP
-  ETS  <- (hits - rand)/(hits + miss + fala - rand)
-  
-  table <- data.frame(SMP, POD, FAR, BIAS, ETS, CSI, ACC, POFD)
-  
-  return(round(table, 2))
 }
 
 statsFun_CAT(data_CAT$HSAF, data_CAT$RainGauges)

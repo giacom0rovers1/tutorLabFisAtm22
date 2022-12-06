@@ -13,14 +13,16 @@ library(rasterVis)
 
 
 # definizione dei nomi dei files e delle cartelle
-rootfolder <- "C:/Users/aless/Desktop/esp_3/"
-datafolder <- "C:/Users/aless/Desktop/esp_3/dati/"
+rootfolder <- "C:/projects/tutorLabFisAtm22/Esp_3/extra/evento"
+datafolder <- "C:/projects/tutorLabFisAtm22/Esp_3/extra/evento/dati/"
 HSAF.folder <- paste0(datafolder, "SAT/")
 RG.folder   <- paste0(datafolder, "PLV/")
 GPM.folder   <- paste0(datafolder, "GPM/")
 ERA5.folder   <- paste0(datafolder, "ERA/")
 figfolder  <- "figure/"
 resfolder  <- "risultati/"
+
+setwd(rootfolder)
 
 # intervallo temporale di interesse
 sel_START <- "201610200000"
@@ -75,13 +77,23 @@ GPM  <-  GPM[[new.times]]
 Regioni <- vect(paste0(datafolder,"Reg01012022_g"))
 #seleziono il poligono dell'Italia
 Sicilia  <- Regioni[19]
+
+Sicilia
 plot(Sicilia)
 
+## ATTENZIONE: ci sono cinque zeri dopo i gradi lat lon
+SiciliaBIS <- terra::project(Sicilia, ItalyBG)
+SiciliaBIS
+plot(SiciliaBIS)
+
+
 ##applico maschera per considerare dati solo sulla Regione Sicilia
-ERA5.mask <- mask(ERA5 >= THR, Sicilia)
-GPM.mask  <- mask(GPM  >= THR, Sicilia)
-RG.mask   <- mask(RG   >= THR, Sicilia)
-HSAF.mask <- mask(!is.na(HSAF), Sicilia)
+ERA5.mask <- mask(ERA5 >= THR, SiciliaBIS)
+GPM.mask  <- mask(GPM  >= THR, SiciliaBIS)
+RG.mask   <- mask(RG   >= THR, SiciliaBIS)
+HSAF.mask <- mask(!is.na(HSAF), SiciliaBIS)
+
+plot(HSAF.mask)
 
 #####FUNZIONI PER STATISTICA#####
 statsFun <- function(Var, Ref){
@@ -243,10 +255,9 @@ for (i in THR_vec){
     HSAF = as.vector(values(HSAF.mask_temp))
   ) %>% na.omit()
   
-  table <- rbind(table,cbind(Soglia=c(i), Prodotto=c(factor("ERA5")), statsFun_CAT(data_CAT_temp$ERA5, data_CAT_temp$RainGauges)))
-  table <- rbind(table,cbind(Soglia=c(i), Prodotto=c(factor("HSAF")), statsFun_CAT(data_CAT_temp$HSAF, data_CAT_temp$RainGauges)))
-  table <- rbind(table,cbind(Soglia=c(i), Prodotto=c(factor("GPM")), statsFun_CAT(data_CAT_temp$GPM, data_CAT_temp$RainGauges)))
-  
+    table <- rbind(table,cbind(Soglia=c(i), Prodotto=c(factor("ERA5")), statsFun_CAT(data_CAT_temp$ERA5, data_CAT_temp$RainGauges)))
+    table <- rbind(table,cbind(Soglia=c(i), Prodotto=c(factor("HSAF")), statsFun_CAT(data_CAT_temp$HSAF, data_CAT_temp$RainGauges)))
+    table <- rbind(table,cbind(Soglia=c(i), Prodotto=c(factor("GPM")), statsFun_CAT(data_CAT_temp$GPM, data_CAT_temp$RainGauges)))
 }
 
 graf_POD <- table %>% ggplot(aes(Soglia, POD, group = Prodotto, colour=Prodotto, shape=Prodotto)) + 
