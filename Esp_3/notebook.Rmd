@@ -141,7 +141,7 @@ THR <- 0.1 # mm/h
 
 ## Strutture dei dati spaziali
 
-Gli oggetti di dati georiferiti nel pacchetto `terra` possono avere una **struttura vettoriale** (punti, segmenti, [poligoni]{.ul}) o **matriciale** ([rasters]{.ul}, ovvero campi continui grigliati, con valori numerici associati ad ogni pixel). Le strutture predisposte per questi tipi di dati sono rispettivamente `SpatVector` e `SpatRaster` (dove "spat" sta chiaramente per "spatial") e si creano con le chiamate `vect()` e `rast()`.
+Gli oggetti di dati georiferiti nel pacchetto `terra` possono avere una **struttura vettoriale** (punti, segmenti, [poligoni]{.underline}) o **matriciale** ([rasters]{.underline}, ovvero campi continui grigliati, con valori numerici associati ad ogni pixel). Le strutture predisposte per questi tipi di dati sono rispettivamente `SpatVector` e `SpatRaster` (dove "spat" sta chiaramente per "spatial") e si creano con le chiamate `vect()` e `rast()`.
 
 I **rasters** possono avere varie matrici di dati "stratificate" una sull'altra: sono i cosiddetti *layers*. Queste matrici condividono la stessa geometria e geolocalizzazione spaziale. Possono rappresentare diverse variabili allo stesso istante temporale oppure ad esempio vari istanti temporali della stessa variabile. Sono insomma oggetti 3D vincolati su una griglia 2D.
 
@@ -890,7 +890,7 @@ writeRaster(HSAF.final, paste0(resfolder, "HSAF_light.tif"), overwrite=TRUE )
 
 #### NetCDF
 
-Più specifico del settore scientifico è il formato NetCDF (UNIDATA UCAR) [<https://www.unidata.ucar.edu/software/netcdf/>]. E\` un formato cosiddetto "self-explaining", nel senso che è predisposto per contenere informazioni ausiliarie che rendono l'interpretazione del file non ambigua (metadati). In questo caso uso la funzione `writeCDF()`.
+Più specifico del settore scientifico è il formato NetCDF (UNIDATA UCAR)[<https://www.unidata.ucar.edu/software/netcdf/>], predisposto anche per contenere più informazioni ausiliari che rendono l'interpretazione del file non ambigua. In questo caso uso la funzione `writeCDF()`.
 
 ```{r}
 varName <- "avgrainrate"
@@ -958,7 +958,7 @@ Vediamo ora le specifiche dell'analisi dati con oggetti *raster*.
 
 #### Istogrammi
 
-Così come per `plot()`, anche la funzione base `hist()` ha un [metodo specifico]{.ul} per oggetti *SpatRaster*: il secondo argomento è il nome del livello selezionato:
+Così come per `plot()`, anche la funzione base `hist()` ha un [metodo specifico]{.underline} per oggetti *SpatRaster*: il secondo argomento è il nome del livello selezionato:
 
 ```{r}
 hist(ERA5, common_timestep, xlab="Hourly average rain rate (mm/h)")
@@ -979,7 +979,7 @@ Se non fornisco nessun argomento, gli istogrammi dei vari layers vengono giustap
 hist(clamp(ERA5, THR, values=F), xlab="AvgRR (mm/h)")
 ```
 
-Per aggregare tutti i livelli assieme, devo accedere direttamente ai valori delle celle. Posso farlo con la funzione `values()` che restituisce la [matrice dei dati del raster]{.ul} (n celle x n livelli):
+Per aggregare tutti i livelli assieme, devo accedere direttamente ai valori delle celle. Posso farlo con la funzione `values()` che restituisce la [matrice dei dati del raster]{.underline} (n celle x n livelli):
 
 ```{r}
 dim(values(ERA5))
@@ -1210,28 +1210,7 @@ Dopo avere indicato nei grafici esplorativi come creare gli istogrammi dei valor
 
 Le linee delle PDF sono ottenute con la funzione `geom_freqpoly()` di `ggplot2`. L'elaborazione preliminare permette una sintassi concisa nella chiamata di plotting.
 
-**Nota tecnica**: gli accenti \`\` (tastiera US, oppure `AltGr + '`) si possono utiizzare per racchiudere un nome di variabile con caratteri non standard, tipo spazi, operazioni o parentesi (ad es. il nome della colonna "Precipitation (mm/h)" nella chiamata di `ggplot()`).
-
-```{r, fig.height=4.5, fig.width=8}
-
-data %>% 
-  pivot_longer(
-    cols = c("RainGauges", "ERA5", "GPM", "HSAF"),
-    names_to = "Product",
-    values_to = "Precipitation (mm/h)"
-  ) %>%
-  ggplot(aes(`Precipitation (mm/h)`, color = Product)) + 
-  geom_freqpoly(breaks = seq(0.2, 300, 2),
-                #binwidth = function(x) 2 * IQR(x) / (length(x)^(1/3)), #binwidth = 0.5, 
-                #boundary = 0.1) +  # , size = 1
-  ) +
-  scale_y_log10() +  # limits = c(1, 2000)
-  # coord_trans(x = 'log10') +
-  scale_x_log10(limits = c(0.2, 300)) + # scale_x_continuous(limits = c(0, 30)) +
-  scale_color_jco() + 
-  theme_bw()
-
-```
+**Nota tecnica**: gli accenti \`\` (tastiera US) si possono utiizzare per racchiudere un nome di variabile con caratteri non standard, tipo spazi, operazioni o parentesi (ad es. il nome della colonna "Precipitation (mm/h)" nella chiamata di ggplot).
 
 ```{r, fig.height=5, fig.width=8}
 
@@ -1242,15 +1221,13 @@ data %>%
     values_to = "Precipitation (mm/h)"
   ) %>%
   ggplot(aes(`Precipitation (mm/h)`, color = Product)) + 
-  geom_freqpoly(binwidth = 0.5, boundaries = 0) +
-  scale_y_log10(limits = c(1, 1e5)) +
-  scale_x_continuous(limits = c(0, 60)) +
+  geom_freqpoly(binwidth = 0.5, size = 1, ) + 
+  scale_y_log10(limits = c(1, 2000)) + 
+  scale_x_continuous(limits = c(0, 30)) +
   scale_color_jco() + 
   theme_bw()
 
-
 ```
-
 
 #### Indicatori statistici
 
